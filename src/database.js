@@ -103,6 +103,28 @@ db.exec(`
   }
 }
 
+// ── Seed admin Telegram from env vars if DB values are empty ──
+// Runs on every startup so env vars added later in Render dashboard take effect.
+{
+  const envToken = process.env.TELEGRAM_BOT_TOKEN || '';
+  if (envToken) {
+    const admin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
+    if (admin) {
+      db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(admin.id);
+      db.prepare(`
+        UPDATE user_telegram
+        SET bot_token = ?, chat_id_1 = ?, chat_id_2 = ?
+        WHERE user_id = ? AND (bot_token IS NULL OR bot_token = '')
+      `).run(
+        envToken,
+        process.env.TELEGRAM_CHAT_ID_1 || '',
+        process.env.TELEGRAM_CHAT_ID_2 || '',
+        admin.id
+      );
+    }
+  }
+}
+
 // ── Users ─────────────────────────────────────────────────────
 function createUser(email, passwordHash, name) {
   const { lastInsertRowid: userId } = db.prepare(

@@ -48,6 +48,13 @@ function buildReminderMessage(userName, todayEvents, tomorrowEvents) {
 }
 
 async function sendUserReminder(userId, tg) {
+  // DB values take priority; fall back to env vars so Render dashboard config works.
+  const botToken = (tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  const chatId1  = (tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '').trim();
+  const chatId2  = (tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '').trim();
+
+  if (!botToken || !chatId1) return { sent: false, reason: 'no_config' };
+
   const todayEvents    = db.getTodayEvents(userId);
   const tomorrowEvents = db.getTomorrowEvents(userId);
 
@@ -58,12 +65,12 @@ async function sendUserReminder(userId, tg) {
   const user    = db.findUserById(userId);
   const message = buildReminderMessage(user?.name, todayEvents, tomorrowEvents);
 
-  const recipients = [tg.chat_id_1, tg.chat_id_2].filter(id => id && id.trim());
+  const recipients = [chatId1, chatId2].filter(id => id);
   const results    = [];
 
   for (const chatId of recipients) {
     try {
-      const data = await sendTelegram(tg.bot_token.trim(), chatId.trim(), message);
+      const data = await sendTelegram(botToken, chatId, message);
       results.push({ chatId, success: true, data });
     } catch (err) {
       console.error(`[Scheduler] Error enviando a ${chatId}:`, err.message);

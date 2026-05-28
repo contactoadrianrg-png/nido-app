@@ -41,8 +41,15 @@ router.put('/password', async (req, res) => {
 });
 
 // GET /api/profile/telegram
+// DB values take priority; env vars are shown as defaults when DB is empty.
 router.get('/telegram', (req, res) => {
-  res.json(db.getUserTelegram(req.user.id));
+  const tg = db.getUserTelegram(req.user.id);
+  res.json({
+    ...tg,
+    bot_token: tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
+    chat_id_1: tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '',
+    chat_id_2: tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '',
+  });
 });
 
 // PUT /api/profile/telegram
@@ -55,11 +62,13 @@ router.put('/telegram', (req, res) => {
 // POST /api/profile/telegram/test
 router.post('/telegram/test', async (req, res) => {
   try {
-    const tg = db.getUserTelegram(req.user.id);
-    if (!tg.bot_token || !tg.chat_id_1) {
+    const tg    = db.getUserTelegram(req.user.id);
+    const token  = tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '';
+    const chatId = tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '';
+    if (!token || !chatId) {
       return res.status(400).json({ error: 'Configura el Bot Token y Chat ID primero' });
     }
-    const result = await scheduler.sendTestMessage(tg.bot_token, tg.chat_id_1);
+    const result = await scheduler.sendTestMessage(token, chatId);
     res.json({ success: true, result });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -70,10 +79,16 @@ router.post('/telegram/test', async (req, res) => {
 router.post('/telegram/send-now', async (req, res) => {
   try {
     const tg = db.getUserTelegram(req.user.id);
-    if (!tg.bot_token || !tg.chat_id_1) {
+    const effectiveTg = {
+      ...tg,
+      bot_token: tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
+      chat_id_1: tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '',
+      chat_id_2: tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '',
+    };
+    if (!effectiveTg.bot_token || !effectiveTg.chat_id_1) {
       return res.status(400).json({ error: 'Configura el Bot Token y Chat ID primero' });
     }
-    const result = await scheduler.sendUserReminder(req.user.id, tg);
+    const result = await scheduler.sendUserReminder(req.user.id, effectiveTg);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
