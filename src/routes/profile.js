@@ -78,16 +78,46 @@ router.put('/telegram', (req, res) => {
 // POST /api/profile/telegram/test
 router.post('/telegram/test', async (req, res) => {
   try {
-    const tg    = db.getUserTelegram(req.user.id);
+    const tg = db.getUserTelegram(req.user.id);
+
+    console.log('[telegram/test] DB row:', JSON.stringify(tg));
+    console.log('[telegram/test] ENV TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? `set (${process.env.TELEGRAM_BOT_TOKEN.slice(0,8)}...)` : 'NOT SET');
+    console.log('[telegram/test] ENV TELEGRAM_CHAT_ID_1:', process.env.TELEGRAM_CHAT_ID_1 || 'NOT SET');
+    console.log('[telegram/test] ENV TELEGRAM_CHAT_ID_2:', process.env.TELEGRAM_CHAT_ID_2 || 'NOT SET');
+
     const token  = tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '';
     const chatId = tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '';
+
+    console.log('[telegram/test] Effective token:', token ? `set (${token.slice(0,8)}...)` : 'EMPTY');
+    console.log('[telegram/test] Effective chatId:', chatId || 'EMPTY');
+
     if (!token || !chatId) {
-      return res.status(400).json({ error: 'Configura el Bot Token y Chat ID primero' });
+      return res.status(400).json({
+        error: 'Configura el Bot Token y Chat ID primero',
+        debug: {
+          db_bot_token: tg.bot_token || '',
+          db_chat_id_1: tg.chat_id_1 || '',
+          env_bot_token: process.env.TELEGRAM_BOT_TOKEN ? 'set' : 'not set',
+          env_chat_id_1: process.env.TELEGRAM_CHAT_ID_1 ? 'set' : 'not set',
+        },
+      });
     }
+
     const result = await scheduler.sendTestMessage(token, chatId);
     res.json({ success: true, result });
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    console.error('[telegram/test] Error:', err.message);
+    console.error('[telegram/test] Stack:', err.stack);
+    res.status(400).json({
+      success: false,
+      error: err.message,
+      errorType: err.constructor.name,
+      stack: err.stack,
+      debug: {
+        env_bot_token: process.env.TELEGRAM_BOT_TOKEN ? 'set' : 'not set',
+        env_chat_id_1: process.env.TELEGRAM_CHAT_ID_1 ? 'set' : 'not set',
+      },
+    });
   }
 });
 
