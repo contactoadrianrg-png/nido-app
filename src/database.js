@@ -221,23 +221,24 @@ function getUserTelegram(userId) {
 }
 
 function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
-  db.prepare(`
-    INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET
-      bot_token     = excluded.bot_token,
-      chat_id_1     = excluded.chat_id_1,
-      chat_id_2     = excluded.chat_id_2,
-      reminder_hour = excluded.reminder_hour,
-      enabled       = excluded.enabled
-  `).run(
-    userId,
-    bot_token    || '',
-    chat_id_1    || '',
-    chat_id_2    || '',
-    reminder_hour ?? 8,
-    enabled ? 1 : 0
-  );
+  // Temporarily disable FK so INSERT OR REPLACE works on persisted DBs where
+  // the user row may not be linked yet (e.g. after a disk reset on Render).
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      bot_token    || '',
+      chat_id_1    || '',
+      chat_id_2    || '',
+      reminder_hour ?? 8,
+      enabled ? 1 : 0
+    );
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
 }
 
 function getUsersWithTelegramEnabled(hour) {
