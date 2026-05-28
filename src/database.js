@@ -1,226 +1,196 @@
 'use strict';
-const Database = require('better-sqlite3');
-const path = require('path');
-const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
+const bcrypt   = require('bcryptjs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../familia.db');
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = OFF');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('dpg-') ? { rejectUnauthorized: false } : false,
+});
 
-// ── Schema ────────────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
-    name TEXT NOT NULL DEFAULT 'Mi Familia',
-    is_admin INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Mi Familia',
+      is_admin INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS children (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    emoji TEXT NOT NULL DEFAULT '👶'
-  );
+    CREATE TABLE IF NOT EXISTS children (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      emoji TEXT NOT NULL DEFAULT '👶',
+      birthdate TEXT,
+      photo_url TEXT
+    );
 
-  CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    category TEXT NOT NULL,
-    date TEXT NOT NULL,
-    time TEXT,
-    notes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS events (
+      id SERIAL PRIMARY KEY,
+      child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      date TEXT NOT NULL,
+      time TEXT,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS user_telegram (
-    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    bot_token TEXT DEFAULT '',
-    chat_id_1 TEXT DEFAULT '',
-    chat_id_2 TEXT DEFAULT '',
-    reminder_hour INTEGER DEFAULT 8,
-    enabled INTEGER DEFAULT 1
-  );
+    CREATE TABLE IF NOT EXISTS user_telegram (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      bot_token TEXT DEFAULT '',
+      chat_id_1 TEXT DEFAULT '',
+      chat_id_2 TEXT DEFAULT '',
+      reminder_hour INTEGER DEFAULT 8,
+      enabled INTEGER DEFAULT 1
+    );
 
-  CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    token TEXT UNIQUE NOT NULL,
-    expires_at TEXT NOT NULL,
-    used INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT UNIQUE NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS user_settings (
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    key TEXT NOT NULL,
-    value TEXT,
-    PRIMARY KEY (user_id, key)
-  );
-`);
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT,
+      PRIMARY KEY (user_id, key)
+    );
+  `);
 
-// ── Migrate: ensure user_telegram exists (independent safety check) ──
-db.exec(`
-  CREATE TABLE IF NOT EXISTS user_telegram (
-    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    bot_token TEXT DEFAULT '',
-    chat_id_1 TEXT DEFAULT '',
-    chat_id_2 TEXT DEFAULT '',
-    reminder_hour INTEGER DEFAULT 8,
-    enabled INTEGER DEFAULT 1
-  )
-`);
-
-// ── Migrate user_telegram: add columns added after initial deploy ─
-{
-  const tgCols = db.pragma('table_info(user_telegram)').map(c => c.name);
-  if (!tgCols.includes('reminder_hour')) {
-    db.exec('ALTER TABLE user_telegram ADD COLUMN reminder_hour INTEGER DEFAULT 8');
-  }
-  if (!tgCols.includes('enabled')) {
-    db.exec('ALTER TABLE user_telegram ADD COLUMN enabled INTEGER DEFAULT 1');
-  }
-}
-
-// ── Migrate children ──────────────────────────────────────────
-{
-  const cols = db.pragma('table_info(children)').map(c => c.name);
-  if (!cols.includes('user_id'))   db.exec('ALTER TABLE children ADD COLUMN user_id INTEGER REFERENCES users(id)');
-  if (!cols.includes('birthdate')) db.exec('ALTER TABLE children ADD COLUMN birthdate TEXT');
-  if (!cols.includes('photo_url')) db.exec('ALTER TABLE children ADD COLUMN photo_url TEXT');
-}
-
-// ── Bootstrap: create admin if no users exist ─────────────────
-{
-  const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-  if (count === 0) {
+  // Bootstrap: create admin if no users exist
+  const { rows: [{ c }] } = await pool.query('SELECT COUNT(*)::int AS c FROM users');
+  if (c === 0) {
     const adminEmail    = process.env.ADMIN_EMAIL    || 'admin@familia.local';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin1234';
-    const hash = bcrypt.hashSync(adminPassword, 10);
+    const hash = await bcrypt.hash(adminPassword, 10);
 
-    const { lastInsertRowid: adminId } = db.prepare(
-      'INSERT INTO users (email, password_hash, name, is_admin) VALUES (?, ?, ?, 1)'
-    ).run(adminEmail, hash, 'Administrador');
+    const { rows: [{ id: adminId }] } = await pool.query(
+      'INSERT INTO users (email, password_hash, name, is_admin) VALUES ($1, $2, $3, 1) RETURNING id',
+      [adminEmail, hash, 'Administrador']
+    );
 
-    // Migration from single-user schema: assign existing children to admin.
-    // On a fresh install (no children yet) create 2 defaults instead.
-    const { changes } = db.prepare('UPDATE children SET user_id = ? WHERE user_id IS NULL').run(adminId);
-    if (changes === 0) {
-      db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(adminId, 'Hijo 1', '👦');
-      db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(adminId, 'Hijo 2', '👧');
+    const { rowCount } = await pool.query(
+      'UPDATE children SET user_id = $1 WHERE user_id IS NULL',
+      [adminId]
+    );
+    if (rowCount === 0) {
+      await pool.query('INSERT INTO children (user_id, name, emoji) VALUES ($1, $2, $3)', [adminId, 'Hijo 1', '👦']);
+      await pool.query('INSERT INTO children (user_id, name, emoji) VALUES ($1, $2, $3)', [adminId, 'Hijo 2', '👧']);
     }
 
-    db.prepare(`
-      INSERT OR IGNORE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2)
-      VALUES (?, ?, ?, ?)
-    `).run(adminId,
-      process.env.TELEGRAM_BOT_TOKEN || '',
-      process.env.TELEGRAM_CHAT_ID_1 || '',
-      process.env.TELEGRAM_CHAT_ID_2 || ''
+    await pool.query(
+      'INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+      [adminId, process.env.TELEGRAM_BOT_TOKEN || '', process.env.TELEGRAM_CHAT_ID_1 || '', process.env.TELEGRAM_CHAT_ID_2 || '']
     );
 
     console.log(`[DB] Admin creado → email: ${adminEmail}  contraseña: ${adminPassword}`);
   }
-}
 
-// ── Seed admin Telegram from env vars if DB values are empty ──
-// Runs on every startup so env vars added later in Render dashboard take effect.
-{
+  // Seed admin Telegram from env vars if DB values are empty
   const envToken = process.env.TELEGRAM_BOT_TOKEN || '';
   if (envToken) {
-    const admin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
-    if (admin) {
-      db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(admin.id);
-      db.prepare(`
-        UPDATE user_telegram
-        SET bot_token = ?, chat_id_1 = ?, chat_id_2 = ?
-        WHERE user_id = ? AND (bot_token IS NULL OR bot_token = '')
-      `).run(
-        envToken,
-        process.env.TELEGRAM_CHAT_ID_1 || '',
-        process.env.TELEGRAM_CHAT_ID_2 || '',
-        admin.id
+    const { rows: admins } = await pool.query('SELECT id FROM users WHERE is_admin = 1 LIMIT 1');
+    if (admins.length > 0) {
+      const adminId = admins[0].id;
+      await pool.query(
+        'INSERT INTO user_telegram (user_id) VALUES ($1) ON CONFLICT DO NOTHING',
+        [adminId]
       );
+      await pool.query(`
+        UPDATE user_telegram
+        SET bot_token = $1, chat_id_1 = $2, chat_id_2 = $3
+        WHERE user_id = $4 AND (bot_token IS NULL OR bot_token = '')
+      `, [envToken, process.env.TELEGRAM_CHAT_ID_1 || '', process.env.TELEGRAM_CHAT_ID_2 || '', adminId]);
     }
   }
+
+  console.log('[DB] PostgreSQL conectado y esquema listo');
 }
 
 // ── Users ─────────────────────────────────────────────────────
-function createUser(email, passwordHash, name) {
-  const { lastInsertRowid: userId } = db.prepare(
-    'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)'
-  ).run(email.toLowerCase().trim(), passwordHash, name.trim());
-
-  db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(userId, 'Hijo 1', '👦');
-  db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(userId, 'Hijo 2', '👧');
-  db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(userId);
-
+async function createUser(email, passwordHash, name) {
+  const { rows: [{ id: userId }] } = await pool.query(
+    'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id',
+    [email.toLowerCase().trim(), passwordHash, name.trim()]
+  );
+  await pool.query('INSERT INTO children (user_id, name, emoji) VALUES ($1, $2, $3)', [userId, 'Hijo 1', '👦']);
+  await pool.query('INSERT INTO children (user_id, name, emoji) VALUES ($1, $2, $3)', [userId, 'Hijo 2', '👧']);
+  await pool.query('INSERT INTO user_telegram (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]);
   return userId;
 }
 
-function findUserByEmail(email) {
-  return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email.trim());
+async function findUserByEmail(email) {
+  const { rows } = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()]);
+  return rows[0] || null;
 }
 
-function findUserById(id) {
-  return db.prepare('SELECT id, email, name, is_admin, created_at FROM users WHERE id = ?').get(id);
+async function findUserById(id) {
+  const { rows } = await pool.query(
+    'SELECT id, email, name, is_admin, created_at FROM users WHERE id = $1',
+    [id]
+  );
+  return rows[0] || null;
 }
 
-function updateUserPassword(userId, passwordHash) {
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+async function updateUserPassword(userId, passwordHash) {
+  await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
 }
 
-function updateUserName(userId, name) {
-  db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name.trim(), userId);
+async function updateUserName(userId, name) {
+  await pool.query('UPDATE users SET name = $1 WHERE id = $2', [name.trim(), userId]);
 }
 
-function getAllUsers() {
-  return db.prepare(`
+async function getAllUsers() {
+  const { rows } = await pool.query(`
     SELECT u.id, u.email, u.name, u.is_admin, u.created_at,
-           COUNT(DISTINCT c.id) AS children_count,
-           COUNT(DISTINCT e.id) AS events_count
+           COUNT(DISTINCT c.id)::int AS children_count,
+           COUNT(DISTINCT e.id)::int AS events_count
     FROM users u
     LEFT JOIN children c ON c.user_id = u.id
     LEFT JOIN events   e ON e.child_id = c.id
     GROUP BY u.id
     ORDER BY u.created_at DESC
-  `).all();
+  `);
+  return rows;
 }
 
 // ── Password reset ────────────────────────────────────────────
-function createPasswordResetToken(userId, token, expiresAt) {
-  db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE user_id = ?').run(userId);
-  db.prepare(
-    'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)'
-  ).run(userId, token, expiresAt);
+async function createPasswordResetToken(userId, token, expiresAt) {
+  await pool.query('UPDATE password_reset_tokens SET used = 1 WHERE user_id = $1', [userId]);
+  await pool.query(
+    'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+    [userId, token, expiresAt]
+  );
 }
 
-function findPasswordResetToken(token) {
-  return db.prepare(`
+async function findPasswordResetToken(token) {
+  const { rows } = await pool.query(`
     SELECT t.*, u.email FROM password_reset_tokens t
     JOIN users u ON u.id = t.user_id
-    WHERE t.token = ? AND t.used = 0 AND t.expires_at > datetime('now')
-  `).get(token);
+    WHERE t.token = $1 AND t.used = 0 AND t.expires_at::timestamp > NOW() AT TIME ZONE 'UTC'
+  `, [token]);
+  return rows[0] || null;
 }
 
-function usePasswordResetToken(token) {
-  db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?').run(token);
+async function usePasswordResetToken(token) {
+  await pool.query('UPDATE password_reset_tokens SET used = 1 WHERE token = $1', [token]);
 }
 
 // ── Telegram config ───────────────────────────────────────────
-function getUserTelegram(userId) {
+async function getUserTelegram(userId) {
   try {
-    const row = db.prepare('SELECT * FROM user_telegram WHERE user_id = ?').get(userId);
-    if (row) return row;
-    // User may not exist in users (e.g. DB was recreated but JWT is still valid).
-    // Try to insert a blank row; if it fails, return safe defaults without throwing.
+    const { rows } = await pool.query('SELECT * FROM user_telegram WHERE user_id = $1', [userId]);
+    if (rows.length > 0) return rows[0];
     try {
-      db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(userId);
-    } catch (_) { /* FK disabled but be defensive */ }
+      await pool.query('INSERT INTO user_telegram (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]);
+    } catch (_) {}
     return { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
   } catch (err) {
     console.error('[DB] getUserTelegram error:', err.message);
@@ -228,159 +198,214 @@ function getUserTelegram(userId) {
   }
 }
 
-function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
-  db.prepare(`
-    INSERT OR REPLACE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    userId,
-    bot_token    || '',
-    chat_id_1    || '',
-    chat_id_2    || '',
-    reminder_hour ?? 8,
-    enabled ? 1 : 0
-  );
+async function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
+  await pool.query(`
+    INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (user_id) DO UPDATE SET
+      bot_token     = EXCLUDED.bot_token,
+      chat_id_1     = EXCLUDED.chat_id_1,
+      chat_id_2     = EXCLUDED.chat_id_2,
+      reminder_hour = EXCLUDED.reminder_hour,
+      enabled       = EXCLUDED.enabled
+  `, [userId, bot_token || '', chat_id_1 || '', chat_id_2 || '', reminder_hour ?? 8, enabled ? 1 : 0]);
 }
 
-function getUsersWithTelegramEnabled(hour) {
-  return db.prepare(`
+async function getUsersWithTelegramEnabled(hour) {
+  const { rows } = await pool.query(`
     SELECT u.id AS user_id, u.name AS user_name,
            t.bot_token, t.chat_id_1, t.chat_id_2
     FROM users u
     JOIN user_telegram t ON t.user_id = u.id
-    WHERE t.enabled = 1 AND t.reminder_hour = ?
+    WHERE t.enabled = 1 AND t.reminder_hour = $1
       AND t.bot_token != '' AND t.chat_id_1 != ''
-  `).all(hour);
+  `, [hour]);
+  return rows;
 }
 
 // ── Children ──────────────────────────────────────────────────
-function getChildren(userId) {
-  return db.prepare('SELECT * FROM children WHERE user_id = ? ORDER BY id').all(userId);
+async function getChildren(userId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM children WHERE user_id = $1 ORDER BY id',
+    [userId]
+  );
+  return rows;
 }
 
-function updateChild(userId, childId, name, emoji, birthdate) {
-  db.prepare('UPDATE children SET name = ?, emoji = ?, birthdate = ? WHERE id = ? AND user_id = ?')
-    .run(name, emoji, birthdate || null, childId, userId);
+async function updateChild(userId, childId, name, emoji, birthdate) {
+  await pool.query(
+    'UPDATE children SET name = $1, emoji = $2, birthdate = $3 WHERE id = $4 AND user_id = $5',
+    [name, emoji, birthdate || null, childId, userId]
+  );
 }
 
-function updateChildPhoto(userId, childId, photo_url) {
-  db.prepare('UPDATE children SET photo_url = ? WHERE id = ? AND user_id = ?')
-    .run(photo_url, childId, userId);
+async function updateChildPhoto(userId, childId, photo_url) {
+  await pool.query(
+    'UPDATE children SET photo_url = $1 WHERE id = $2 AND user_id = $3',
+    [photo_url, childId, userId]
+  );
 }
 
-function getChildProfile(userId, childId) {
-  const child = db.prepare('SELECT * FROM children WHERE id = ? AND user_id = ?').get(childId, userId);
+async function getChildProfile(userId, childId) {
+  const { rows: [child] } = await pool.query(
+    'SELECT * FROM children WHERE id = $1 AND user_id = $2',
+    [childId, userId]
+  );
   if (!child) return null;
+
   const id = child.id;
+  const today = `TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')`;
+
+  const [totalR, upcomingR, medicaR, excursionR, eventsR] = await Promise.all([
+    pool.query('SELECT COUNT(*)::int AS c FROM events WHERE child_id = $1', [id]),
+    pool.query(`SELECT COUNT(*)::int AS c FROM events WHERE child_id = $1 AND date >= TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')`, [id]),
+    pool.query(`SELECT COUNT(*)::int AS c FROM events WHERE child_id = $1 AND category = 'medica'`, [id]),
+    pool.query(`SELECT COUNT(*)::int AS c FROM events WHERE child_id = $1 AND category = 'excursion'`, [id]),
+    pool.query(`
+      SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
+      FROM events e JOIN children c ON c.id = e.child_id
+      WHERE e.child_id = $1
+      ORDER BY e.date DESC, e.time DESC
+    `, [id]),
+  ]);
+
   const stats = {
-    total:     db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ?`).get(id).c,
-    upcoming:  db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND date >= date('now','localtime')`).get(id).c,
-    medica:    db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND category = 'medica'`).get(id).c,
-    excursion: db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND category = 'excursion'`).get(id).c,
+    total:     totalR.rows[0].c,
+    upcoming:  upcomingR.rows[0].c,
+    medica:    medicaR.rows[0].c,
+    excursion: excursionR.rows[0].c,
   };
-  const events = db.prepare(`
-    SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
-    FROM events e JOIN children c ON c.id = e.child_id
-    WHERE e.child_id = ?
-    ORDER BY e.date DESC, e.time DESC
-  `).all(id);
-  return { child, stats, events };
+
+  return { child, stats, events: eventsR.rows };
 }
 
 // ── Events ────────────────────────────────────────────────────
-function getEvents(userId, { childId, category, from, to, upcoming } = {}) {
+async function getEvents(userId, { childId, category, from, to, upcoming } = {}) {
   let q = `
     SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
     FROM events e JOIN children c ON c.id = e.child_id
-    WHERE c.user_id = ?
+    WHERE c.user_id = $1
   `;
   const p = [userId];
+  let idx = 2;
 
-  if (childId)  { q += ' AND e.child_id = ?'; p.push(childId); }
-  if (category) { q += ' AND e.category = ?'; p.push(category); }
-  if (from)     { q += ' AND e.date >= ?';    p.push(from); }
-  if (to)       { q += ' AND e.date <= ?';    p.push(to); }
+  if (childId)  { q += ` AND e.child_id = $${idx++}`; p.push(childId); }
+  if (category) { q += ` AND e.category = $${idx++}`; p.push(category); }
+  if (from)     { q += ` AND e.date >= $${idx++}`;    p.push(from); }
+  if (to)       { q += ` AND e.date <= $${idx++}`;    p.push(to); }
 
   if (upcoming === 'true' || upcoming === true) {
-    q += ` AND e.date >= date('now','localtime') ORDER BY e.date ASC, e.time ASC`;
+    q += ` AND e.date >= TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') ORDER BY e.date ASC, e.time ASC`;
   } else {
     q += ' ORDER BY e.date DESC, e.time DESC';
   }
 
-  return db.prepare(q).all(...p);
+  const { rows } = await pool.query(q, p);
+  return rows;
 }
 
-function createEvent(userId, { child_id, title, category, date, time, notes }) {
-  const child = db.prepare('SELECT id FROM children WHERE id = ? AND user_id = ?').get(child_id, userId);
+async function createEvent(userId, { child_id, title, category, date, time, notes }) {
+  const { rows: [child] } = await pool.query(
+    'SELECT id FROM children WHERE id = $1 AND user_id = $2',
+    [child_id, userId]
+  );
   if (!child) throw new Error('Child not found');
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO events (child_id, title, category, date, time, notes) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(child_id, title, category, date, time || null, notes || null);
-  return lastInsertRowid;
+  const { rows: [{ id }] } = await pool.query(
+    'INSERT INTO events (child_id, title, category, date, time, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+    [child_id, title, category, date, time || null, notes || null]
+  );
+  return id;
 }
 
-function updateEvent(userId, eventId, { child_id, title, category, date, time, notes }) {
-  const child = db.prepare('SELECT id FROM children WHERE id = ? AND user_id = ?').get(child_id, userId);
+async function updateEvent(userId, eventId, { child_id, title, category, date, time, notes }) {
+  const { rows: [child] } = await pool.query(
+    'SELECT id FROM children WHERE id = $1 AND user_id = $2',
+    [child_id, userId]
+  );
   if (!child) throw new Error('Child not found');
-  db.prepare(`
-    UPDATE events SET child_id=?, title=?, category=?, date=?, time=?, notes=?
-    WHERE id=? AND child_id IN (SELECT id FROM children WHERE user_id=?)
-  `).run(child_id, title, category, date, time || null, notes || null, eventId, userId);
+  await pool.query(`
+    UPDATE events SET child_id=$1, title=$2, category=$3, date=$4, time=$5, notes=$6
+    WHERE id=$7 AND child_id IN (SELECT id FROM children WHERE user_id=$8)
+  `, [child_id, title, category, date, time || null, notes || null, eventId, userId]);
 }
 
-function deleteEvent(userId, eventId) {
-  db.prepare(`
-    DELETE FROM events WHERE id=?
-    AND child_id IN (SELECT id FROM children WHERE user_id=?)
-  `).run(eventId, userId);
+async function deleteEvent(userId, eventId) {
+  await pool.query(`
+    DELETE FROM events WHERE id=$1
+    AND child_id IN (SELECT id FROM children WHERE user_id=$2)
+  `, [eventId, userId]);
 }
 
 // ── Stats ─────────────────────────────────────────────────────
-function getStats(userId) {
-  const { total }    = db.prepare(`SELECT COUNT(*) AS total FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=?`).get(userId);
-  const { upcoming } = db.prepare(`SELECT COUNT(*) AS upcoming FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=? AND e.date>=date('now','localtime')`).get(userId);
+async function getStats(userId) {
+  const [totalR, upcomingR, byChildR, byCatR, byMonthR] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int AS total FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=$1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS upcoming FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=$1 AND e.date>=TO_CHAR(CURRENT_DATE,'YYYY-MM-DD')`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT c.name, c.emoji, COUNT(e.id)::int AS count FROM children c LEFT JOIN events e ON e.child_id=c.id WHERE c.user_id=$1 GROUP BY c.id, c.name, c.emoji`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT e.category, COUNT(e.id)::int AS count FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=$1 GROUP BY e.category ORDER BY count DESC`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT SUBSTRING(e.date, 1, 7) AS month, COUNT(e.id)::int AS count FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=$1 GROUP BY month ORDER BY month DESC LIMIT 12`,
+      [userId]
+    ),
+  ]);
 
-  const eventsByChild    = db.prepare(`SELECT c.name, c.emoji, COUNT(e.id) AS count FROM children c LEFT JOIN events e ON e.child_id=c.id WHERE c.user_id=? GROUP BY c.id`).all(userId);
-  const eventsByCategory = db.prepare(`SELECT e.category, COUNT(e.id) AS count FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=? GROUP BY e.category ORDER BY count DESC`).all(userId);
-  const eventsByMonth    = db.prepare(`SELECT strftime('%Y-%m',e.date) AS month, COUNT(e.id) AS count FROM events e JOIN children c ON c.id=e.child_id WHERE c.user_id=? GROUP BY month ORDER BY month DESC LIMIT 12`).all(userId);
-
-  return { totalEvents: total, upcomingCount: upcoming, eventsByChild, eventsByCategory, eventsByMonth };
+  return {
+    totalEvents:      totalR.rows[0].total,
+    upcomingCount:    upcomingR.rows[0].upcoming,
+    eventsByChild:    byChildR.rows,
+    eventsByCategory: byCatR.rows,
+    eventsByMonth:    byMonthR.rows,
+  };
 }
 
 // ── Scheduler helpers ─────────────────────────────────────────
-function getTodayEvents(userId) {
-  return db.prepare(`
+async function getTodayEvents(userId) {
+  const { rows } = await pool.query(`
     SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
     FROM events e JOIN children c ON c.id=e.child_id
-    WHERE c.user_id=? AND e.date=date('now','localtime') ORDER BY e.time ASC
-  `).all(userId);
+    WHERE c.user_id=$1 AND e.date=TO_CHAR(CURRENT_DATE,'YYYY-MM-DD') ORDER BY e.time ASC
+  `, [userId]);
+  return rows;
 }
 
-function getTomorrowEvents(userId) {
-  return db.prepare(`
+async function getTomorrowEvents(userId) {
+  const { rows } = await pool.query(`
     SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
     FROM events e JOIN children c ON c.id=e.child_id
-    WHERE c.user_id=? AND e.date=date('now','+1 day','localtime') ORDER BY e.time ASC
-  `).all(userId);
+    WHERE c.user_id=$1 AND e.date=TO_CHAR(CURRENT_DATE + INTERVAL '1 day','YYYY-MM-DD') ORDER BY e.time ASC
+  `, [userId]);
+  return rows;
 }
 
 // ── Settings (per-user) ───────────────────────────────────────
-function getSettings(userId) {
-  const rows = db.prepare('SELECT key, value FROM user_settings WHERE user_id=?').all(userId);
+async function getSettings(userId) {
+  const { rows } = await pool.query('SELECT key, value FROM user_settings WHERE user_id=$1', [userId]);
   return Object.fromEntries(rows.map(r => [r.key, r.value]));
 }
 
-function updateSettings(userId, obj) {
-  const upsert = db.prepare(`
-    INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?)
-    ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value
-  `);
-  db.transaction(entries => {
-    for (const [key, value] of entries) upsert.run(userId, key, String(value));
-  })(Object.entries(obj));
+async function updateSettings(userId, obj) {
+  for (const [key, value] of Object.entries(obj)) {
+    await pool.query(`
+      INSERT INTO user_settings (user_id, key, value) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value
+    `, [userId, key, String(value)]);
+  }
 }
 
 module.exports = {
+  initDb,
   createUser, findUserByEmail, findUserById, updateUserPassword, updateUserName, getAllUsers,
   createPasswordResetToken, findPasswordResetToken, usePasswordResetToken,
   getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled,

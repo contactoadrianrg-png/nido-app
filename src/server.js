@@ -18,33 +18,36 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// If UPLOADS_DIR is set (Render disk), serve uploads from there at /uploads
 if (process.env.UPLOADS_DIR) {
   app.use('/uploads', express.static(process.env.UPLOADS_DIR));
 }
 
-// ── Public: auth ───────────────────────────────────────────────
+// ── Public: auth ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
-// ── ICS export: browser download needs token in query param ───
-app.get('/api/export.ics', authOrQuery, (req, res) => {
-  const events   = db.getEvents(req.user.id, { childId: req.query.childId });
-  const children = db.getChildren(req.user.id);
-  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="mi-familia.ics"');
-  res.send(generateICS(events, children));
+// ── ICS export ────────────────────────────────────────────────────────────
+app.get('/api/export.ics', authOrQuery, async (req, res) => {
+  try {
+    const events   = await db.getEvents(req.user.id, { childId: req.query.childId });
+    const children = await db.getChildren(req.user.id);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="mi-familia.ics"');
+    res.send(generateICS(events, children));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ── Protected: events, children, stats ────────────────────────
+// ── Protected: events, children, stats ────────────────────────────────────
 app.use('/api', authMiddleware, eventsRoutes);
 
-// ── Protected: user profile & telegram ────────────────────────
+// ── Protected: user profile & telegram ────────────────────────────────────
 app.use('/api/profile', authMiddleware, profileRoutes);
 
-// ── Protected + admin ─────────────────────────────────────────
+// ── Protected + admin ─────────────────────────────────────────────────────
 app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
 
-// ── Frontend pages (SPA + auth pages) ─────────────────────────
+// ── Frontend pages ────────────────────────────────────────────────────────
 const pub = p => path.join(__dirname, '../public', p);
 app.get('/login',           (_, res) => res.sendFile(pub('login.html')));
 app.get('/register',        (_, res) => res.sendFile(pub('register.html')));
@@ -52,13 +55,21 @@ app.get('/app',             (_, res) => res.sendFile(pub('app.html')));
 app.get('/admin',           (_, res) => res.sendFile(pub('admin.html')));
 app.get('/reset-password',  (_, res) => res.sendFile(pub('reset-password.html')));
 
-// ── Start ──────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log('');
-  console.log('🏠 ════════════════════════════════════');
-  console.log(`   Mi Familia corriendo en:`);
-  console.log(`   http://localhost:${PORT}`);
-  console.log('   ════════════════════════════════════');
-  console.log('');
-  scheduler.init();
+// ── Start ──────────────────────────────────────────────────────────────────
+async function start() {
+  await db.initDb();
+  app.listen(PORT, () => {
+    console.log('');
+    console.log('🏠 ════════════════════════════════════');
+    console.log(`   Mi Familia corriendo en:`);
+    console.log(`   http://localhost:${PORT}`);
+    console.log('   ════════════════════════════════════');
+    console.log('');
+    scheduler.init();
+  });
+}
+
+start().catch(err => {
+  console.error('[Server] Error al iniciar:', err.message);
+  process.exit(1);
 });

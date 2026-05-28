@@ -48,21 +48,20 @@ function buildReminderMessage(userName, todayEvents, tomorrowEvents) {
 }
 
 async function sendUserReminder(userId, tg) {
-  // DB values take priority; fall back to env vars so Render dashboard config works.
   const botToken = (tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '').trim();
   const chatId1  = (tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '').trim();
   const chatId2  = (tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '').trim();
 
   if (!botToken || !chatId1) return { sent: false, reason: 'no_config' };
 
-  const todayEvents    = db.getTodayEvents(userId);
-  const tomorrowEvents = db.getTomorrowEvents(userId);
+  const todayEvents    = await db.getTodayEvents(userId);
+  const tomorrowEvents = await db.getTomorrowEvents(userId);
 
   if (todayEvents.length === 0 && tomorrowEvents.length === 0) {
     return { sent: false, reason: 'no_events' };
   }
 
-  const user    = db.findUserById(userId);
+  const user    = await db.findUserById(userId);
   const message = buildReminderMessage(user?.name, todayEvents, tomorrowEvents);
 
   const recipients = [chatId1, chatId2].filter(id => id);
@@ -94,22 +93,26 @@ function init() {
   const timezone = process.env.TIMEZONE || 'Europe/Madrid';
 
   cron.schedule('0 * * * *', async () => {
-    const hour  = new Date().getHours();
-    const users = db.getUsersWithTelegramEnabled(hour);
-    if (users.length === 0) return;
+    try {
+      const hour  = new Date().getHours();
+      const users = await db.getUsersWithTelegramEnabled(hour);
+      if (users.length === 0) return;
 
-    console.log(`[Scheduler] ${hour}:00 — enviando a ${users.length} usuario(s)`);
-    for (const user of users) {
-      try {
-        const result = await sendUserReminder(user.user_id, user);
-        if (result.sent) {
-          console.log(`[Scheduler] Enviado → ${user.user_name}`);
-        } else {
-          console.log(`[Scheduler] Sin eventos → ${user.user_name} (${result.reason})`);
+      console.log(`[Scheduler] ${hour}:00 — enviando a ${users.length} usuario(s)`);
+      for (const user of users) {
+        try {
+          const result = await sendUserReminder(user.user_id, user);
+          if (result.sent) {
+            console.log(`[Scheduler] Enviado → ${user.user_name}`);
+          } else {
+            console.log(`[Scheduler] Sin eventos → ${user.user_name} (${result.reason})`);
+          }
+        } catch (err) {
+          console.error(`[Scheduler] Error → ${user.user_name}:`, err.message);
         }
-      } catch (err) {
-        console.error(`[Scheduler] Error → ${user.user_name}:`, err.message);
       }
+    } catch (err) {
+      console.error('[Scheduler] Error en cron:', err.message);
     }
   }, { timezone });
 
