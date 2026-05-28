@@ -141,11 +141,16 @@ function catBadge(cat) {
 }
 
 function renderEventCard(event, showDays = false) {
+  const [, m, d] = event.date.split('-');
   const time  = event.time  ? `<span>⏰ ${event.time}</span>` : '';
   const notes = event.notes ? `<div class="event-notes">📝 ${escHtml(event.notes)}</div>` : '';
   const pills = showDays ? daysPill(event.date) : '';
   return `
     <div class="event-card" data-id="${event.id}" onclick="openEditModal(${event.id})">
+      <div class="ev-date-col">
+        <div class="ev-day">${parseInt(d)}</div>
+        <div class="ev-month">${MONTHS_ES[parseInt(m) - 1]}</div>
+      </div>
       <div class="event-stripe stripe-${event.category}"></div>
       <div class="event-content">
         <div class="event-header">
@@ -173,9 +178,17 @@ function renderHeader() {
     `<div class="avatar-badge">${c.emoji} ${escHtml(c.name)}</div>`
   ).join('');
 
-  const now = new Date();
+  const now  = new Date();
+  const hour = now.getHours();
+  const saludo = hour < 13 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const firstName = (mfUser.name || '').split(' ')[0];
+
+  const greetEl = document.getElementById('headerGreeting');
+  if (greetEl) greetEl.textContent = firstName ? `${saludo}, ${firstName}!` : `${saludo}!`;
+
   const dayName = DAYS_ES[now.getDay()];
-  document.getElementById('headerSubtitle').textContent =
+  const dateEl = document.getElementById('headerDate');
+  if (dateEl) dateEl.textContent =
     `${dayName.charAt(0).toUpperCase() + dayName.slice(1)}, ${now.getDate()} de ${MONTHS_FULL[now.getMonth()]} ${now.getFullYear()}`;
 }
 
@@ -278,7 +291,6 @@ async function loadStats() {
   }
 
   const maxChild = Math.max(...stats.eventsByChild.map(c => c.count), 1);
-  const maxCat   = stats.eventsByCategory.length > 0 ? stats.eventsByCategory[0].count : 1;
   const maxMonth = Math.max(...stats.eventsByMonth.map(m => m.count), 1);
 
   const sortedMonths = [...stats.eventsByMonth].sort((a, b) => a.month.localeCompare(b.month));
@@ -291,8 +303,6 @@ async function loadStats() {
       <div class="month-label">${MONTHS_ES[parseInt(mo) - 1]}</div>
     </div>`;
   }).join('');
-
-  const catColorMap = { medica:'var(--cat-medica)', examen:'var(--cat-examen)', excursion:'var(--cat-excursion)', deporte:'var(--cat-deporte)', colegio:'var(--cat-colegio)', otro:'var(--cat-otro)' };
 
   el.innerHTML = `
     <div class="stats-grid">
@@ -312,16 +322,16 @@ async function loadStats() {
 
     <div class="stats-section">
       <h3>Por categoría</h3>
-      ${stats.eventsByCategory.map(c => {
-        const cat   = CATEGORIES.find(x => x.id === c.category) || { emoji: '📌', label: c.category };
-        const color = catColorMap[c.category] || '#aaa';
-        const pct   = Math.round((c.count / maxCat) * 100);
-        return `<div class="cat-stat">
-          <div class="cat-stat-label">${cat.emoji} ${cat.label}</div>
-          <div class="cat-stat-bar-wrap"><div class="cat-stat-bar" style="width:${pct}%;background:${color}"></div></div>
-          <div class="cat-stat-count">${c.count}</div>
-        </div>`;
-      }).join('')}
+      <div class="cat-cards-grid">
+        ${CATEGORIES.map(cat => {
+          const found = stats.eventsByCategory.find(c => c.category === cat.id);
+          return `<div class="cat-card cat-card-${cat.id}">
+            <div class="cat-card-emoji">${cat.emoji}</div>
+            <div class="cat-card-count">${found ? found.count : 0}</div>
+            <div class="cat-card-label">${cat.label}</div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>
 
     ${sortedMonths.length > 0 ? `
@@ -612,7 +622,8 @@ function selectChild(id) { selectedChildId = id; renderChildSelector(); }
 function renderCategorySelector() {
   const el = document.getElementById('categorySelector');
   el.innerHTML = CATEGORIES.map(cat => `
-    <button type="button" class="cat-btn${selectedCategory === cat.id ? ' selected' : ''}" onclick="selectCategory('${cat.id}')">
+    <button type="button" class="cat-btn${selectedCategory === cat.id ? ' selected' : ''}"
+            data-cat="${cat.id}" onclick="selectCategory('${cat.id}')">
       <span class="cat-emoji">${cat.emoji}</span>
       <span class="cat-label">${cat.label}</span>
     </button>`).join('');
@@ -702,8 +713,16 @@ async function switchView(viewId) {
   state.currentView = viewId;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view' + viewId.charAt(0).toUpperCase() + viewId.slice(1)).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
-  document.getElementById('fabBtn').style.display = (viewId === 'upcoming' || viewId === 'history') ? '' : 'none';
+
+  const navItems = Array.from(document.querySelectorAll('.nav-item'));
+  const activeIdx = navItems.findIndex(b => b.dataset.view === viewId);
+  navItems.forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
+
+  const pill = document.getElementById('navPill');
+  if (pill && activeIdx >= 0) pill.style.left = (activeIdx * 25) + '%';
+
+  document.getElementById('fabBtn').style.display =
+    (viewId === 'upcoming' || viewId === 'history') ? '' : 'none';
   try { await VIEW_LOADERS[viewId](); } catch (err) { console.error('Error loading view:', err); }
 }
 
