@@ -405,13 +405,18 @@ async function updateSettings(userId, obj) {
 }
 
 async function getUserByChatId(chatId) {
+  const id = String(chatId).trim();
+  if (!id) return null;
+  console.log(`[DB] getUserByChatId: buscando chat_id="${id}"`);
   const { rows } = await pool.query(`
     SELECT u.id, u.name, t.bot_token, t.chat_id_1, t.chat_id_2
     FROM user_telegram t
     JOIN users u ON u.id = t.user_id
-    WHERE t.chat_id_1 = $1 OR t.chat_id_2 = $1
+    WHERE (t.chat_id_1 = $1 OR t.chat_id_2 = $1)
+      AND $1 != ''
     LIMIT 1
-  `, [String(chatId)]);
+  `, [id]);
+  console.log(`[DB] getUserByChatId: ${rows.length ? `encontrado user_id=${rows[0].id}` : 'no encontrado'}`);
   return rows[0] || null;
 }
 
