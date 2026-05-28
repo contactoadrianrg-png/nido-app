@@ -74,6 +74,17 @@ db.exec(`
   )
 `);
 
+// ── Migrate user_telegram: add columns added after initial deploy ─
+{
+  const tgCols = db.pragma('table_info(user_telegram)').map(c => c.name);
+  if (!tgCols.includes('reminder_hour')) {
+    db.exec('ALTER TABLE user_telegram ADD COLUMN reminder_hour INTEGER DEFAULT 8');
+  }
+  if (!tgCols.includes('enabled')) {
+    db.exec('ALTER TABLE user_telegram ADD COLUMN enabled INTEGER DEFAULT 1');
+  }
+}
+
 // ── Migrate children: add user_id column if missing ───────────
 {
   const cols = db.pragma('table_info(children)').map(c => c.name);

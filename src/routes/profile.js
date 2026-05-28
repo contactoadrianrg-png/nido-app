@@ -65,9 +65,14 @@ router.get('/telegram', (req, res) => {
 
 // PUT /api/profile/telegram
 router.put('/telegram', (req, res) => {
-  const { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled } = req.body;
-  db.updateUserTelegram(req.user.id, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled });
-  res.json({ success: true });
+  try {
+    const { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled } = req.body;
+    db.updateUserTelegram(req.user.id, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[profile] PUT /telegram error:', err.message);
+    res.status(500).json({ error: 'Error al guardar configuración de Telegram' });
+  }
 });
 
 // POST /api/profile/telegram/test
