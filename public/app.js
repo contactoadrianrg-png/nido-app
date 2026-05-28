@@ -356,7 +356,28 @@ async function loadSettings() {
   const el = document.getElementById('settingsContent');
   el.innerHTML = '<div class="loader">Cargando...</div>';
 
-  const [tg] = await Promise.all([api.get('/api/profile/telegram')]);
+  let tg;
+  try {
+    tg = await api.get('/api/profile/telegram');
+  } catch (err) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Error al cargar la configuración</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:24px">${escHtml(err.message || 'Error de conexión')}</div>
+        <button class="btn btn-primary btn-sm" onclick="loadSettings()">🔄 Reintentar</button>
+      </div>`;
+    return;
+  }
+  if (!tg) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:48px;margin-bottom:16px">🔒</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:24px">Sesión expirada</div>
+        <button class="btn btn-primary btn-sm" onclick="logout()">Iniciar sesión</button>
+      </div>`;
+    return;
+  }
 
   const childProfiles = state.children.map((c, i) => `
     <div class="settings-row">
@@ -723,7 +744,22 @@ async function switchView(viewId) {
 
   document.getElementById('fabBtn').style.display =
     (viewId === 'upcoming' || viewId === 'history') ? '' : 'none';
-  try { await VIEW_LOADERS[viewId](); } catch (err) { console.error('Error loading view:', err); }
+  try {
+    await VIEW_LOADERS[viewId]();
+  } catch (err) {
+    console.error('Error loading view:', err);
+    const viewEl = document.getElementById('view' + viewId.charAt(0).toUpperCase() + viewId.slice(1));
+    const contentEl = viewEl?.querySelector('[id$="Content"]') || viewEl;
+    if (contentEl) {
+      contentEl.innerHTML = `
+        <div style="text-align:center;padding:40px 20px">
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Error al cargar</div>
+          <div style="font-size:14px;color:var(--text-muted);margin-bottom:24px">${escHtml(err.message || 'Error inesperado')}</div>
+          <button class="btn btn-primary btn-sm" onclick="switchView('${viewId}')">🔄 Reintentar</button>
+        </div>`;
+    }
+  }
 }
 
 async function refreshCurrentView() {
