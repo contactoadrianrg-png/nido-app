@@ -3,8 +3,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const express   = require('express');
 const path      = require('path');
 const db        = require('./database');
-const scheduler = require('./scheduler');
 const { generateICS } = require('./ics');
+const { sendUserReminder } = require('./scheduler');
 
 const { authMiddleware, adminMiddleware, authOrQuery } = require('./middleware/auth');
 const authRoutes    = require('./routes/auth');
@@ -13,8 +13,7 @@ const profileRoutes = require('./routes/profile');
 const adminRoutes   = require('./routes/admin');
 const { handleTelegramWebhook, registerTelegramWebhook } = require('./telegram-webhook');
 
-const app  = express();
-const PORT = process.env.PORT || 3000;
+const app = express();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
@@ -23,11 +22,56 @@ if (process.env.UPLOADS_DIR) {
   app.use('/uploads', express.static(process.env.UPLOADS_DIR));
 }
 
+// ── Lazy DB init — runs once on first request, cached for the lifetime of the instance ──
+let dbReady = null;
+app.use(async (req, res, next) => {
+  try {
+    if (!dbReady) dbReady = db.initDb();
+    await dbReady;
+    next();
+  } catch (err) {
+    console.error('[Server] DB init failed:', err.message);
+    res.status(503).json({ error: 'Database unavailable' });
+  }
+});
+
 // ── Public: auth ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
 // ── Public: Telegram webhook ───────────────────────────────────────────────
 app.post('/api/telegram/webhook', handleTelegramWebhook);
+
+// ── Vercel Cron: daily reminder (replaces node-cron in serverless) ─────────
+// Vercel calls GET /api/cron/reminder at the schedule defined in vercel.json.
+// Protected by CRON_SECRET so only Vercel (or an admin) can trigger it.
+app.get('/api/cron/reminder', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const users = await db.getAllUsersWithTelegramEnabled();
+    console.log(`[Cron] reminder — ${users.length} usuario(s) con Telegram activo`);
+
+    const results = [];
+    for (const user of users) {
+      try {
+        const result = await sendUserReminder(user.user_id, user);
+        results.push({ user: user.user_name, ...result });
+        console.log(`[Cron] ${user.user_name}: ${result.sent ? 'enviado' : result.reason}`);
+      } catch (err) {
+        console.error(`[Cron] Error → ${user.user_name}:`, err.message);
+        results.push({ user: user.user_name, sent: false, error: err.message });
+      }
+    }
+
+    res.json({ ok: true, processed: users.length, results });
+  } catch (err) {
+    console.error('[Cron] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── ICS export ────────────────────────────────────────────────────────────
 app.get('/api/export.ics', authOrQuery, async (req, res) => {
@@ -53,28 +97,33 @@ app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
 
 // ── Frontend pages ────────────────────────────────────────────────────────
 const pub = p => path.join(__dirname, '../public', p);
-app.get('/login',           (_, res) => res.sendFile(pub('login.html')));
-app.get('/register',        (_, res) => res.sendFile(pub('register.html')));
-app.get('/app',             (_, res) => res.sendFile(pub('app.html')));
-app.get('/admin',           (_, res) => res.sendFile(pub('admin.html')));
-app.get('/reset-password',  (_, res) => res.sendFile(pub('reset-password.html')));
+app.get('/login',          (_, res) => res.sendFile(pub('login.html')));
+app.get('/register',       (_, res) => res.sendFile(pub('register.html')));
+app.get('/app',            (_, res) => res.sendFile(pub('app.html')));
+app.get('/admin',          (_, res) => res.sendFile(pub('admin.html')));
+app.get('/reset-password', (_, res) => res.sendFile(pub('reset-password.html')));
 
-// ── Start ──────────────────────────────────────────────────────────────────
-async function start() {
-  await db.initDb();
-  app.listen(PORT, () => {
-    console.log('');
-    console.log('🏠 ════════════════════════════════════');
-    console.log(`   Mi Familia corriendo en:`);
-    console.log(`   http://localhost:${PORT}`);
-    console.log('   ════════════════════════════════════');
-    console.log('');
-    scheduler.init();
-    registerTelegramWebhook();
-  });
+// ── Local dev: start server directly ──────────────────────────────────────
+// When run with `node src/server.js` or `nodemon`, boots a regular HTTP server.
+// Vercel imports this file as a module and uses the exported app instead.
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  db.initDb()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log('');
+        console.log('🏠 ════════════════════════════════════');
+        console.log(`   Nido corriendo en: http://localhost:${PORT}`);
+        console.log('   ════════════════════════════════════');
+        console.log('');
+        require('./scheduler').init();
+        registerTelegramWebhook();
+      });
+    })
+    .catch(err => {
+      console.error('[Server] Error al iniciar:', err.message);
+      process.exit(1);
+    });
 }
 
-start().catch(err => {
-  console.error('[Server] Error al iniciar:', err.message);
-  process.exit(1);
-});
+module.exports = app;

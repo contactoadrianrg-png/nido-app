@@ -223,6 +223,18 @@ async function getUsersWithTelegramEnabled(hour) {
   return rows;
 }
 
+async function getAllUsersWithTelegramEnabled() {
+  const { rows } = await pool.query(`
+    SELECT u.id AS user_id, u.name AS user_name,
+           t.bot_token, t.chat_id_1, t.chat_id_2
+    FROM users u
+    JOIN user_telegram t ON t.user_id = u.id
+    WHERE t.enabled = 1
+      AND t.bot_token != '' AND t.chat_id_1 != ''
+  `);
+  return rows;
+}
+
 // ── Children ──────────────────────────────────────────────────
 async function getChildren(userId) {
   const { rows } = await pool.query(
@@ -424,7 +436,7 @@ module.exports = {
   initDb,
   createUser, findUserByEmail, findUserById, updateUserPassword, updateUserName, getAllUsers,
   createPasswordResetToken, findPasswordResetToken, usePasswordResetToken,
-  getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled, getUserByChatId,
+  getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled, getAllUsersWithTelegramEnabled, getUserByChatId,
   getChildren, updateChild, updateChildPhoto, getChildProfile,
   getEvents, createEvent, updateEvent, deleteEvent,
   getStats,
