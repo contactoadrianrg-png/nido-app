@@ -1,24 +1,15 @@
 'use strict';
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
-const multer  = require('multer');
-const db      = require('../database');
+const express  = require('express');
+const multer   = require('multer');
+const db       = require('../database');
+const { uploadPhoto } = require('../cloudinary');
 
 const router = express.Router();
 
-const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../public/uploads');
-fs.mkdirSync(uploadsDir, { recursive: true });
-
+// Memory storage: file is available as req.file.buffer for Cloudinary upload
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename:    (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
-      cb(null, `child_${req.params.id}_${Date.now()}${ext || '.jpg'}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) return cb(new Error('Solo imágenes'));
     cb(null, true);
@@ -49,10 +40,12 @@ router.get('/children/:id/profile', async (req, res) => {
 router.post('/children/:id/photo', upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
-    const photoUrl = `/uploads/${req.file.filename}`;
+    const publicId = `child_${req.params.id}_${Date.now()}`;
+    const photoUrl = await uploadPhoto(req.file.buffer, publicId);
     await db.updateChildPhoto(req.user.id, req.params.id, photoUrl);
     res.json({ success: true, photo_url: photoUrl });
   } catch (err) {
+    console.error('[Photo upload] error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
