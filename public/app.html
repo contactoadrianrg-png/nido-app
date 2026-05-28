@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Mi Familia</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-top">
+      <div class="header-title">
+        <span class="header-icon">🏠</span>
+        <h1>Mi Familia</h1>
+      </div>
+      <div class="header-right">
+        <div class="header-avatars" id="headerAvatars"></div>
+        <button class="header-logout-btn" id="logoutBtn" title="Cerrar sesión">⏻</button>
+      </div>
+    </div>
+    <div class="header-subtitle" id="headerSubtitle">Cargando...</div>
+  </header>
+
+  <!-- ── MAIN ── -->
+  <main class="main" id="main">
+
+    <!-- VISTA: PRÓXIMOS -->
+    <section id="viewUpcoming" class="view active">
+      <div class="today-banner" id="todayBanner" style="display:none"></div>
+      <div class="view-toolbar">
+        <div class="chip-row" id="upcomingChildFilter"></div>
+        <div class="chip-row" id="upcomingCatFilter">
+          <button class="chip chip-cat active" data-cat="">Todos</button>
+          <button class="chip chip-cat" data-cat="medica">🏥</button>
+          <button class="chip chip-cat" data-cat="examen">📝</button>
+          <button class="chip chip-cat" data-cat="excursion">🎒</button>
+          <button class="chip chip-cat" data-cat="deporte">⚽</button>
+          <button class="chip chip-cat" data-cat="colegio">🏫</button>
+          <button class="chip chip-cat" data-cat="otro">📌</button>
+        </div>
+      </div>
+      <div class="events-container" id="upcomingList"></div>
+    </section>
+
+    <!-- VISTA: HISTORIAL -->
+    <section id="viewHistory" class="view">
+      <div class="view-toolbar">
+        <div class="chip-row" id="historyChildFilter"></div>
+        <div class="filter-selects">
+          <select class="filter-select" id="historyCatFilter">
+            <option value="">Todas las categorías</option>
+            <option value="medica">🏥 Médica</option>
+            <option value="examen">📝 Examen</option>
+            <option value="excursion">🎒 Excursión</option>
+            <option value="deporte">⚽ Deporte</option>
+            <option value="colegio">🏫 Colegio</option>
+            <option value="otro">📌 Otro</option>
+          </select>
+        </div>
+      </div>
+      <div class="events-container" id="historyList"></div>
+    </section>
+
+    <!-- VISTA: ESTADÍSTICAS -->
+    <section id="viewStats" class="view">
+      <div id="statsContent"></div>
+    </section>
+
+    <!-- VISTA: CONFIGURACIÓN -->
+    <section id="viewSettings" class="view">
+      <div id="settingsContent"></div>
+    </section>
+
+  </main>
+
+  <!-- ── FAB ── -->
+  <button class="fab" id="fabBtn" title="Añadir evento">+</button>
+
+  <!-- ── BOTTOM NAV ── -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-view="upcoming">
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">Próximos</span>
+    </button>
+    <button class="nav-item" data-view="history">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Historial</span>
+    </button>
+    <button class="nav-item" data-view="stats">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Stats</span>
+    </button>
+    <button class="nav-item" data-view="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Config</span>
+    </button>
+  </nav>
+
+  <!-- ── MODAL: AÑADIR / EDITAR EVENTO ── -->
+  <div class="modal-overlay" id="eventModal">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <h3 id="modalTitle">Nuevo evento</h3>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="eventForm" autocomplete="off">
+          <input type="hidden" id="eventId">
+
+          <div class="form-group">
+            <label class="form-label">¿Para quién?</label>
+            <div class="child-selector" id="childSelector"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Actividad</label>
+            <input class="form-input" type="text" id="eventTitle" placeholder="¿Qué actividad?" required maxlength="100">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Categoría</label>
+            <div class="category-grid" id="categorySelector"></div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Fecha</label>
+              <input class="form-input" type="date" id="eventDate" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hora <span class="optional">(opcional)</span></label>
+              <input class="form-input" type="time" id="eventTime">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Notas <span class="optional">(opcional)</span></label>
+            <textarea class="form-input form-textarea" id="eventNotes" placeholder="Información adicional..." rows="3" maxlength="500"></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display:none">
+              🗑️ Eliminar
+            </button>
+            <button type="submit" class="btn btn-primary" id="saveEventBtn">
+              ✓ Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

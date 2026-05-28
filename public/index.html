@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Familia - Organiza la vida de tus hijos</title>
+  <style>
+    :root {
+      --primary: #6C63FF;
+      --primary-dark: #5a52d5;
+      --secondary: #FF6584;
+      --bg: #f0f2ff;
+      --text: #1a1d2e;
+      --text-muted: #6b7280;
+      --card: #ffffff;
+      --radius: 18px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* NAV */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: rgba(255,255,255,0.9);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(108,99,255,0.1);
+    }
+    .logo { font-size: 20px; font-weight: 700; color: var(--primary); }
+    .nav-links { display: flex; gap: 12px; align-items: center; }
+    .btn-nav {
+      padding: 8px 18px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-ghost { color: var(--primary); background: transparent; }
+    .btn-ghost:hover { background: var(--bg); }
+    .btn-filled { color: #fff; background: var(--primary); }
+    .btn-filled:hover { background: var(--primary-dark); }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 64px 24px 48px;
+      background: linear-gradient(135deg, #6C63FF 0%, #8b5cf6 60%, #a855f7 100%);
+      color: #fff;
+    }
+    .hero-icon { font-size: 72px; margin-bottom: 16px; }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 18px;
+      opacity: 0.9;
+      max-width: 520px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-cta {
+      padding: 14px 32px;
+      border-radius: 32px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-cta:active { transform: scale(0.97); }
+    .btn-cta-primary {
+      background: #fff;
+      color: var(--primary);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .btn-cta-primary:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.22); }
+    .btn-cta-secondary {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.5);
+    }
+    .btn-cta-secondary:hover { background: rgba(255,255,255,0.3); }
+
+    /* FEATURES */
+    .features {
+      padding: 56px 24px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .features h2 {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 36px;
+      color: var(--text);
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      box-shadow: 0 2px 16px rgba(108,99,255,0.10);
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); }
+    .feature-icon { font-size: 40px; margin-bottom: 12px; }
+    .feature-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .feature-desc { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+    /* HOW IT WORKS */
+    .how {
+      background: linear-gradient(135deg, #6C63FF08, #a855f708);
+      padding: 56px 24px;
+    }
+    .how-inner { max-width: 640px; margin: 0 auto; text-align: center; }
+    .how h2 { font-size: 28px; font-weight: 700; margin-bottom: 36px; }
+    .steps { display: flex; flex-direction: column; gap: 20px; text-align: left; }
+    .step { display: flex; gap: 16px; align-items: flex-start; }
+    .step-num {
+      width: 36px; height: 36px; min-width: 36px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px;
+    }
+    .step-text strong { display: block; font-size: 16px; margin-bottom: 4px; }
+    .step-text span { font-size: 14px; color: var(--text-muted); }
+
+    /* CTA FINAL */
+    .cta-final {
+      text-align: center;
+      padding: 64px 24px;
+    }
+    .cta-final h2 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+    .cta-final p { color: var(--text-muted); margin-bottom: 32px; font-size: 16px; }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border-top: 1px solid rgba(108,99,255,0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">🏠 Mi Familia</div>
+    <div class="nav-links">
+      <a href="/login" class="btn-nav btn-ghost">Entrar</a>
+      <a href="/register" class="btn-nav btn-filled">Registrarse</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-icon">👨‍👩‍👧‍👦</div>
+    <h1>Organiza la vida de tus hijos</h1>
+    <p>Gestiona citas médicas, exámenes, excursiones y más. Recibe recordatorios por Telegram cada mañana.</p>
+    <div class="hero-cta">
+      <a href="/register" class="btn-cta btn-cta-primary">✨ Crear cuenta gratis</a>
+      <a href="/login" class="btn-cta btn-cta-secondary">Ya tengo cuenta</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <h2>Todo lo que necesitas</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <div class="feature-title">Calendario familiar</div>
+        <div class="feature-desc">Registra eventos por hijo, categoría y fecha. Vista de próximos e historial.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <div class="feature-title">Recordatorios Telegram</div>
+        <div class="feature-desc">Recibe un mensaje cada mañana con los eventos de hoy y mañana, a la hora que elijas.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">Estadísticas</div>
+        <div class="feature-desc">Gráficos de actividad por hijo, categoría y mes para ver cómo se distribuye el tiempo.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📁</div>
+        <div class="feature-title">Exportar a iCal</div>
+        <div class="feature-desc">Descarga tus eventos en formato .ics para importarlos en Google Calendar o Apple Calendar.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">Privado y seguro</div>
+        <div class="feature-desc">Cada familia tiene su propia cuenta. Solo tú ves los datos de tus hijos.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📂</div>
+        <div class="feature-title">6 categorías</div>
+        <div class="feature-desc">Médica, examen, excursión, deporte, colegio y otros. Con filtros por hijo y tipo.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how">
+    <div class="how-inner">
+      <h2>Cómo funciona</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            <strong>Crea tu cuenta</strong>
+            <span>Regístrate con tu email y contraseña en menos de 1 minuto.</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-text">
+            <strong>Personaliza los perfiles</strong>
+            <span>Pon el nombre y emoji de cada hijo para identificarlos fácilmente.</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            <strong>Añade sus actividades</strong>
+            <span>Citas médicas, exámenes, excursiones... todo en un solo lugar.</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-text">
+            <strong>Activa los recordatorios</strong>
+            <span>Configura tu bot de Telegram para recibir el resumen diario por la mañana.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-final">
+    <h2>¿Listo para empezar?</h2>
+    <p>Gratis, sin límites, sin tarjeta de crédito.</p>
+    <a href="/register" class="btn-cta btn-cta-primary" style="display:inline-block">✨ Crear cuenta gratis</a>
+  </section>
+
+  <footer>
+    <p>🏠 Mi Familia · Organiza la vida de tus hijos</p>
+  </footer>
+
+  <script>
+    // Redirect to app if already logged in
+    const token = localStorage.getItem('mf_token');
+    if (token) window.location.replace('/app');
+  </script>
+</body>
+</html>

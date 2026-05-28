@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión - Mi Familia</title>
+  <style>
+    :root { --primary: #6C63FF; --primary-dark: #5a52d5; --secondary: #FF6584; --bg: #f0f2ff; --card: #fff; --text: #1a1d2e; --text-muted: #6b7280; --border: #e5e7eb; --radius: 18px; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    .header { background: linear-gradient(135deg, #6C63FF 0%, #8b5cf6 60%, #a855f7 100%); padding: 32px 24px 48px; text-align: center; color: #fff; }
+    .header-icon { font-size: 48px; margin-bottom: 8px; }
+    .header h1 { font-size: 24px; font-weight: 800; }
+    .header p { opacity: 0.85; font-size: 14px; margin-top: 4px; }
+    .card-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 0 16px 32px; margin-top: -24px; }
+    .card { background: var(--card); border-radius: var(--radius); box-shadow: 0 4px 32px rgba(108,99,255,0.15); padding: 32px 28px; width: 100%; max-width: 420px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 12px 14px;
+      border: 1.5px solid var(--border); border-radius: 12px;
+      font-size: 16px; color: var(--text);
+      background: #fafafa;
+      outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--primary); background: #fff; }
+    .btn {
+      width: 100%; padding: 14px;
+      border-radius: 32px; border: none;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: all 0.2s;
+      margin-top: 8px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error-msg { color: #e53e3e; font-size: 13px; margin-top: 12px; text-align: center; display: none; }
+    .divider { text-align: center; margin: 20px 0; color: var(--text-muted); font-size: 13px; }
+    .link { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .link:hover { text-decoration: underline; }
+    .forgot { text-align: right; margin-top: -10px; margin-bottom: 18px; }
+    .forgot a { font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-icon">🏠</div>
+    <h1>Mi Familia</h1>
+    <p>Bienvenido de vuelta</p>
+  </div>
+
+  <div class="card-wrap">
+    <div class="card">
+      <form id="loginForm" autocomplete="on">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="tu@email.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" placeholder="••••••" required autocomplete="current-password">
+        </div>
+        <div class="forgot">
+          <a href="/reset-password.html" class="link">¿Olvidaste tu contraseña?</a>
+        </div>
+        <button type="submit" class="btn btn-primary" id="submitBtn">Entrar</button>
+        <div class="error-msg" id="errorMsg"></div>
+      </form>
+      <div class="divider">¿No tienes cuenta? <a href="/register" class="link">Regístrate gratis</a></div>
+    </div>
+  </div>
+
+  <script>
+    // Redirect if already logged in
+    if (localStorage.getItem('mf_token')) window.location.replace('/app');
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const err = document.getElementById('errorMsg');
+      err.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email:    document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+
+        localStorage.setItem('mf_token', data.token);
+        localStorage.setItem('mf_user',  JSON.stringify(data.user));
+        window.location.replace('/app');
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    });
+  </script>
+</body>
+</html>
