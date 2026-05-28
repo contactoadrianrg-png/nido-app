@@ -18,6 +18,24 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS children (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    emoji TEXT NOT NULL DEFAULT '👶'
+  );
+
+  CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    date TEXT NOT NULL,
+    time TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS user_telegram (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     bot_token TEXT DEFAULT '',
@@ -64,7 +82,13 @@ db.exec(`
       'INSERT INTO users (email, password_hash, name, is_admin) VALUES (?, ?, ?, 1)'
     ).run(adminEmail, hash, 'Administrador');
 
-    db.prepare('UPDATE children SET user_id = ? WHERE user_id IS NULL').run(adminId);
+    // Migration from single-user schema: assign existing children to admin.
+    // On a fresh install (no children yet) create 2 defaults instead.
+    const { changes } = db.prepare('UPDATE children SET user_id = ? WHERE user_id IS NULL').run(adminId);
+    if (changes === 0) {
+      db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(adminId, 'Hijo 1', '👦');
+      db.prepare('INSERT INTO children (user_id, name, emoji) VALUES (?, ?, ?)').run(adminId, 'Hijo 2', '👧');
+    }
 
     db.prepare(`
       INSERT OR IGNORE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2)
