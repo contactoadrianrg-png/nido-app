@@ -3,20 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Crear cuenta - Mi Familia</title>
+  <title>Crear cuenta - Nido</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #7C4DFF;
-      --primary-dark: #6839f5;
-      --bg: #FFFFFF;
-      --gray-light: #F5F5F5;
-      --text: #1A1A2E;
-      --text-muted: #9E9E9E;
+      --primary:      #6B9E8F;
+      --primary-dark: #5A8A7A;
+      --accent:       #E8877A;
+      --bg:           #FAF7F2;
+      --text:         #2D4A3E;
+      --text-muted:   #8BA89E;
+      --border:       #E2EBE8;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #fff;
+      font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       display: flex;
@@ -27,40 +31,37 @@
       margin: 0 auto;
     }
 
-    /* ── LOGO ── */
     .logo-section {
       text-align: center;
-      padding: 52px 0 32px;
+      padding: 44px 0 28px;
     }
-    .logo-emoji {
-      font-size: 64px;
-      line-height: 1;
-      display: block;
-      margin-bottom: 12px;
+    .logo-bird {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
     }
     .logo-name {
-      font-size: 30px;
-      font-weight: 800;
+      font-size: 34px;
+      font-weight: 900;
       color: var(--primary);
-      margin-bottom: 6px;
-      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      letter-spacing: -0.8px;
     }
     .logo-sub {
       font-size: 16px;
+      font-weight: 600;
       color: var(--text-muted);
-      font-weight: 400;
     }
 
-    /* ── FORM ── */
     .form-wrap { width: 100%; max-width: 400px; }
 
     .form-group { margin-bottom: 14px; }
     label {
       display: block;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       color: var(--text-muted);
-      margin-bottom: 7px;
+      margin-bottom: 8px;
       text-transform: uppercase;
       letter-spacing: 0.6px;
     }
@@ -68,28 +69,27 @@
       width: 100%;
       padding: 16px 24px;
       border-radius: 50px;
-      border: 2px solid transparent;
+      border: 2px solid var(--border);
       font-size: 16px;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--text);
-      background: var(--gray-light);
+      background: #fff;
       outline: none;
-      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
       font-family: inherit;
     }
     input:focus {
       border-color: var(--primary);
-      background: #fff;
-      box-shadow: 0 0 0 3px rgba(124,77,255,0.12);
+      box-shadow: 0 0 0 3px rgba(107,158,143,0.14);
     }
-    input::placeholder { color: #C0C0C0; font-weight: 400; }
+    input::placeholder { color: #B0C4BE; font-weight: 500; }
 
     .hint {
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--text-muted);
       margin-top: 6px;
-      padding-left: 12px;
+      padding-left: 14px;
     }
 
     .btn-submit {
@@ -98,29 +98,29 @@
       border-radius: 50px;
       border: none;
       font-size: 17px;
-      font-weight: 700;
+      font-weight: 800;
       background: var(--primary);
       color: #fff;
       cursor: pointer;
       transition: all 0.2s;
-      box-shadow: 0 6px 22px rgba(124,77,255,0.42);
+      box-shadow: 0 6px 22px rgba(107,158,143,0.44);
       font-family: inherit;
       letter-spacing: -0.1px;
-      margin-top: 6px;
+      margin-top: 8px;
     }
-    .btn-submit:hover  { background: var(--primary-dark); box-shadow: 0 8px 28px rgba(124,77,255,0.52); transform: translateY(-1px); }
+    .btn-submit:hover  { background: var(--primary-dark); box-shadow: 0 8px 28px rgba(107,158,143,0.54); transform: translateY(-1px); }
     .btn-submit:active { transform: scale(0.98); }
     .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
 
     .error-msg {
-      color: #c0392b;
+      color: #A04035;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       margin-top: 16px;
       text-align: center;
       display: none;
-      background: #fee2e2;
-      border-radius: 12px;
+      background: #FDECEA;
+      border-radius: 14px;
       padding: 12px 16px;
     }
 
@@ -128,13 +128,13 @@
       text-align: center;
       margin-top: 28px;
       font-size: 15px;
+      font-weight: 600;
       color: var(--text-muted);
-      font-weight: 500;
     }
     .divider a {
       color: var(--primary);
       text-decoration: none;
-      font-weight: 700;
+      font-weight: 800;
     }
     .divider a:hover { text-decoration: underline; }
   </style>
@@ -142,15 +142,31 @@
 <body>
 
   <div class="logo-section">
-    <span class="logo-emoji">🏠</span>
-    <div class="logo-name">Mi Familia</div>
+    <div class="logo-bird">
+      <svg width="72" height="65" viewBox="0 0 80 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 68 Q40 54 72 68" stroke="#A07850" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 62 Q40 48 68 62" stroke="#B89060" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M16 56 Q40 42 64 56" stroke="#C9A872" stroke-width="2" stroke-linecap="round"/>
+        <ellipse cx="34" cy="59" rx="7" ry="5.5" fill="#EDD9BA"/>
+        <ellipse cx="47" cy="60" rx="7" ry="5.5" fill="#E8D5B7"/>
+        <path d="M20 34 Q8 44 6 40 Q14 38 20 34Z" fill="#5A8A7A"/>
+        <ellipse cx="34" cy="28" rx="15" ry="12" fill="#6B9E8F"/>
+        <path d="M22 24 Q30 12 38 24" fill="#5A8A7A"/>
+        <circle cx="50" cy="17" r="10" fill="#6B9E8F"/>
+        <circle cx="53" cy="14.5" r="3" fill="white"/>
+        <circle cx="53.8" cy="14.5" r="1.5" fill="#2D4A3E"/>
+        <circle cx="53" cy="13.8" r="0.8" fill="white" opacity="0.8"/>
+        <path d="M60 17 L68 18.5 L60 20.5Z" fill="#E8877A"/>
+      </svg>
+    </div>
+    <div class="logo-name">Nido</div>
     <div class="logo-sub">Crea tu cuenta gratuita</div>
   </div>
 
   <div class="form-wrap">
     <form id="registerForm" autocomplete="off">
       <div class="form-group">
-        <label for="name">Nombre</label>
+        <label for="name">Nombre de la familia</label>
         <input type="text" id="name" placeholder="Familia García" required maxlength="60" autocomplete="off">
       </div>
       <div class="form-group">
@@ -160,10 +176,10 @@
       <div class="form-group">
         <label for="password">Contraseña</label>
         <input type="password" id="password" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password">
-        <div class="hint">Mínimo 6 caracteres</div>
+        <div class="hint">Al menos 6 caracteres</div>
       </div>
       <div class="form-group">
-        <label for="password2">Repite la contraseña</label>
+        <label for="password2">Repetir contraseña</label>
         <input type="password" id="password2" placeholder="••••••••" required autocomplete="new-password">
       </div>
       <button type="submit" class="btn-submit" id="submitBtn">Crear cuenta</button>

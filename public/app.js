@@ -216,13 +216,13 @@ function closeDrawer() {
 
 function renderDrawerCats() {
   const DRAWER_CATS = [
-    { id: '',          label: 'Todos',     emoji: '📋', bg: 'rgba(124,77,255,0.12)'  },
-    { id: 'medica',    label: 'Médica',    emoji: '🏥', bg: 'rgba(255,107,107,0.14)' },
-    { id: 'examen',    label: 'Examen',    emoji: '📝', bg: 'rgba(155,89,182,0.14)'  },
-    { id: 'excursion', label: 'Excursión', emoji: '🎒', bg: 'rgba(38,222,129,0.14)'  },
-    { id: 'deporte',   label: 'Deporte',   emoji: '⚽', bg: 'rgba(246,201,14,0.14)'  },
-    { id: 'colegio',   label: 'Colegio',   emoji: '🏫', bg: 'rgba(69,170,242,0.14)'  },
-    { id: 'otro',      label: 'Otro',      emoji: '📌', bg: 'rgba(253,150,68,0.14)'  },
+    { id: '',          label: 'Todos',     emoji: '🌿', bg: 'rgba(107,158,143,0.15)'  },
+    { id: 'medica',    label: 'Médica',    emoji: '🏥', bg: 'rgba(232,135,122,0.18)'  },
+    { id: 'examen',    label: 'Examen',    emoji: '📝', bg: 'rgba(155,143,208,0.18)'  },
+    { id: 'excursion', label: 'Excursión', emoji: '🎒', bg: 'rgba(110,200,160,0.18)'  },
+    { id: 'deporte',   label: 'Deporte',   emoji: '⚽', bg: 'rgba(212,168,83,0.18)'   },
+    { id: 'colegio',   label: 'Colegio',   emoji: '🏫', bg: 'rgba(126,181,208,0.18)'  },
+    { id: 'otro',      label: 'Otro',      emoji: '📌', bg: 'rgba(212,149,106,0.18)'  },
   ];
   const active = state.upcomingCatFilter;
   document.getElementById('drawerCatList').innerHTML = DRAWER_CATS.map(cat => `
