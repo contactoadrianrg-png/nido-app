@@ -62,6 +62,18 @@ db.exec(`
   );
 `);
 
+// ── Migrate: ensure user_telegram exists (independent safety check) ──
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_telegram (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    bot_token TEXT DEFAULT '',
+    chat_id_1 TEXT DEFAULT '',
+    chat_id_2 TEXT DEFAULT '',
+    reminder_hour INTEGER DEFAULT 8,
+    enabled INTEGER DEFAULT 1
+  )
+`);
+
 // ── Migrate children: add user_id column if missing ───────────
 {
   const cols = db.pragma('table_info(children)').map(c => c.name);

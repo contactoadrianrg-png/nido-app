@@ -53,7 +53,13 @@ router.get('/telegram', (req, res) => {
     });
   } catch (err) {
     console.error('[profile] GET /telegram error:', err.message);
-    res.status(500).json({ error: 'Error al cargar configuración de Telegram' });
+    res.json({
+      bot_token: process.env.TELEGRAM_BOT_TOKEN || '',
+      chat_id_1: process.env.TELEGRAM_CHAT_ID_1 || '',
+      chat_id_2: process.env.TELEGRAM_CHAT_ID_2 || '',
+      reminder_hour: 8,
+      enabled: 1,
+    });
   }
 });
 
