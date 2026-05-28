@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 
 const db = new Database(path.join(__dirname, '../familia.db'));
 db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+db.pragma('foreign_keys = OFF');
 
 // ── Schema ────────────────────────────────────────────────────
 db.exec(`
@@ -212,33 +212,33 @@ function usePasswordResetToken(token) {
 
 // ── Telegram config ───────────────────────────────────────────
 function getUserTelegram(userId) {
-  let row = db.prepare('SELECT * FROM user_telegram WHERE user_id = ?').get(userId);
-  if (!row) {
-    db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(userId);
-    row = { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
+  try {
+    const row = db.prepare('SELECT * FROM user_telegram WHERE user_id = ?').get(userId);
+    if (row) return row;
+    // User may not exist in users (e.g. DB was recreated but JWT is still valid).
+    // Try to insert a blank row; if it fails, return safe defaults without throwing.
+    try {
+      db.prepare('INSERT OR IGNORE INTO user_telegram (user_id) VALUES (?)').run(userId);
+    } catch (_) { /* FK disabled but be defensive */ }
+    return { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
+  } catch (err) {
+    console.error('[DB] getUserTelegram error:', err.message);
+    return { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
   }
-  return row;
 }
 
 function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
-  // Temporarily disable FK so INSERT OR REPLACE works on persisted DBs where
-  // the user row may not be linked yet (e.g. after a disk reset on Render).
-  db.pragma('foreign_keys = OFF');
-  try {
-    db.prepare(`
-      INSERT OR REPLACE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      userId,
-      bot_token    || '',
-      chat_id_1    || '',
-      chat_id_2    || '',
-      reminder_hour ?? 8,
-      enabled ? 1 : 0
-    );
-  } finally {
-    db.pragma('foreign_keys = ON');
-  }
+  db.prepare(`
+    INSERT OR REPLACE INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    bot_token    || '',
+    chat_id_1    || '',
+    chat_id_2    || '',
+    reminder_hour ?? 8,
+    enabled ? 1 : 0
+  );
 }
 
 function getUsersWithTelegramEnabled(hour) {
