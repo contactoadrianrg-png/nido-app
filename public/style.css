@@ -127,8 +127,8 @@ body {
   cursor: pointer;
 }
 .child-circle {
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   border: 3px solid rgba(255,255,255,0.75);
   overflow: hidden;
@@ -141,12 +141,12 @@ body {
 }
 .child-circle:hover { transform: scale(1.06); border-color: #fff; }
 .child-circle-img   { width: 100%; height: 100%; object-fit: cover; }
-.child-circle-emoji { font-size: 36px; line-height: 1; }
+.child-circle-emoji { font-size: 46px; line-height: 1; }
 .child-name-pill {
   background: #fff;
   border-radius: 20px;
-  padding: 5px 16px;
-  font-size: 14px;
+  padding: 5px 18px;
+  font-size: 20px;
   font-weight: 800;
   color: #2D4A3E;
   white-space: nowrap;
@@ -399,7 +399,16 @@ body {
 .badge-otro      { background: #F8EDE4; color: #8A5030; }
 
 .event-meta  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.event-child { font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+.event-child { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+.event-child-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  overflow: hidden; flex-shrink: 0;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-light);
+}
+.event-child-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.event-child-emoji-sm  { font-size: 18px; line-height: 1; }
 .event-notes { font-size: 13px; font-weight: 500; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .days-pill { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: var(--radius-pill); flex-shrink: 0; }

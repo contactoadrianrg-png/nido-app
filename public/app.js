@@ -146,6 +146,10 @@ function renderEventCard(event, showDays = false) {
   const time  = event.time  ? `<span>⏰ ${event.time}</span>` : '';
   const notes = event.notes ? `<div class="event-notes">📝 ${escHtml(event.notes)}</div>` : '';
   const pills = showDays ? daysPill(event.date) : '';
+  const child = state.children.find(c => c.id === event.child_id);
+  const childAvatar = child?.photo_url
+    ? `<div class="event-child-avatar"><img src="${escHtml(child.photo_url)}" alt="${escHtml(event.child_name)}"></div>`
+    : `<div class="event-child-avatar"><span class="event-child-emoji-sm">${event.child_emoji}</span></div>`;
   return `
     <div class="event-card" data-id="${event.id}" onclick="openEditModal(${event.id})">
       <div class="ev-date-col">
@@ -159,7 +163,7 @@ function renderEventCard(event, showDays = false) {
           ${catBadge(event.category)}
         </div>
         <div class="event-meta">
-          <span class="event-child">${event.child_emoji} ${escHtml(event.child_name)}</span>
+          <span class="event-child">${childAvatar}${escHtml(event.child_name)}</span>
           ${time}${pills}
         </div>
         ${notes}

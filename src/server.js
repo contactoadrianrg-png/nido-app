@@ -11,6 +11,7 @@ const authRoutes    = require('./routes/auth');
 const eventsRoutes  = require('./routes/events');
 const profileRoutes = require('./routes/profile');
 const adminRoutes   = require('./routes/admin');
+const { handleTelegramWebhook, registerTelegramWebhook } = require('./telegram-webhook');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,9 @@ if (process.env.UPLOADS_DIR) {
 
 // ── Public: auth ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+
+// ── Public: Telegram webhook ───────────────────────────────────────────────
+app.post('/api/telegram/webhook', handleTelegramWebhook);
 
 // ── ICS export ────────────────────────────────────────────────────────────
 app.get('/api/export.ics', authOrQuery, async (req, res) => {
@@ -66,6 +70,7 @@ async function start() {
     console.log('   ════════════════════════════════════');
     console.log('');
     scheduler.init();
+    registerTelegramWebhook();
   });
 }
 

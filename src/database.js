@@ -404,11 +404,22 @@ async function updateSettings(userId, obj) {
   }
 }
 
+async function getUserByChatId(chatId) {
+  const { rows } = await pool.query(`
+    SELECT u.id, u.name, t.bot_token, t.chat_id_1, t.chat_id_2
+    FROM user_telegram t
+    JOIN users u ON u.id = t.user_id
+    WHERE t.chat_id_1 = $1 OR t.chat_id_2 = $1
+    LIMIT 1
+  `, [String(chatId)]);
+  return rows[0] || null;
+}
+
 module.exports = {
   initDb,
   createUser, findUserByEmail, findUserById, updateUserPassword, updateUserName, getAllUsers,
   createPasswordResetToken, findPasswordResetToken, usePasswordResetToken,
-  getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled,
+  getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled, getUserByChatId,
   getChildren, updateChild, updateChildPhoto, getChildProfile,
   getEvents, createEvent, updateEvent, deleteEvent,
   getStats,
