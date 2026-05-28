@@ -3,7 +3,8 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-const db = new Database(path.join(__dirname, '../familia.db'));
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../familia.db');
+const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = OFF');
 
@@ -85,12 +86,12 @@ db.exec(`
   }
 }
 
-// ── Migrate children: add user_id column if missing ───────────
+// ── Migrate children ──────────────────────────────────────────
 {
   const cols = db.pragma('table_info(children)').map(c => c.name);
-  if (!cols.includes('user_id')) {
-    db.exec('ALTER TABLE children ADD COLUMN user_id INTEGER REFERENCES users(id)');
-  }
+  if (!cols.includes('user_id'))   db.exec('ALTER TABLE children ADD COLUMN user_id INTEGER REFERENCES users(id)');
+  if (!cols.includes('birthdate')) db.exec('ALTER TABLE children ADD COLUMN birthdate TEXT');
+  if (!cols.includes('photo_url')) db.exec('ALTER TABLE children ADD COLUMN photo_url TEXT');
 }
 
 // ── Bootstrap: create admin if no users exist ─────────────────
@@ -257,9 +258,33 @@ function getChildren(userId) {
   return db.prepare('SELECT * FROM children WHERE user_id = ? ORDER BY id').all(userId);
 }
 
-function updateChild(userId, childId, name, emoji) {
-  db.prepare('UPDATE children SET name = ?, emoji = ? WHERE id = ? AND user_id = ?')
-    .run(name, emoji, childId, userId);
+function updateChild(userId, childId, name, emoji, birthdate) {
+  db.prepare('UPDATE children SET name = ?, emoji = ?, birthdate = ? WHERE id = ? AND user_id = ?')
+    .run(name, emoji, birthdate || null, childId, userId);
+}
+
+function updateChildPhoto(userId, childId, photo_url) {
+  db.prepare('UPDATE children SET photo_url = ? WHERE id = ? AND user_id = ?')
+    .run(photo_url, childId, userId);
+}
+
+function getChildProfile(userId, childId) {
+  const child = db.prepare('SELECT * FROM children WHERE id = ? AND user_id = ?').get(childId, userId);
+  if (!child) return null;
+  const id = child.id;
+  const stats = {
+    total:     db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ?`).get(id).c,
+    upcoming:  db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND date >= date('now','localtime')`).get(id).c,
+    medica:    db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND category = 'medica'`).get(id).c,
+    excursion: db.prepare(`SELECT COUNT(*) AS c FROM events WHERE child_id = ? AND category = 'excursion'`).get(id).c,
+  };
+  const events = db.prepare(`
+    SELECT e.*, c.name AS child_name, c.emoji AS child_emoji
+    FROM events e JOIN children c ON c.id = e.child_id
+    WHERE e.child_id = ?
+    ORDER BY e.date DESC, e.time DESC
+  `).all(id);
+  return { child, stats, events };
 }
 
 // ── Events ────────────────────────────────────────────────────
@@ -359,7 +384,7 @@ module.exports = {
   createUser, findUserByEmail, findUserById, updateUserPassword, updateUserName, getAllUsers,
   createPasswordResetToken, findPasswordResetToken, usePasswordResetToken,
   getUserTelegram, updateUserTelegram, getUsersWithTelegramEnabled,
-  getChildren, updateChild,
+  getChildren, updateChild, updateChildPhoto, getChildProfile,
   getEvents, createEvent, updateEvent, deleteEvent,
   getStats,
   getTodayEvents, getTomorrowEvents,

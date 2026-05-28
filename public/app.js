@@ -36,6 +36,7 @@ const state = {
   historyChildFilter: 'all',
   historyCatFilter: '',
   editingEmojiChildId: null,
+  currentProfileChildId: null,
 };
 
 // ── API (with auth) ───────────────────────
@@ -174,9 +175,12 @@ function escHtml(str) {
 // ── Header ────────────────────────────────
 function renderHeader() {
   const el = document.getElementById('headerAvatars');
-  el.innerHTML = state.children.map(c =>
-    `<div class="avatar-badge">${c.emoji} ${escHtml(c.name)}</div>`
-  ).join('');
+  el.innerHTML = state.children.map(c => {
+    const avatar = c.photo_url
+      ? `<img class="avatar-photo" src="${escHtml(c.photo_url)}" alt="${escHtml(c.name)}">`
+      : c.emoji;
+    return `<div class="avatar-badge" onclick="openChildProfile(${c.id})">${avatar} ${escHtml(c.name)}</div>`;
+  }).join('');
 
   const now  = new Date();
   const hour = now.getHours();
@@ -190,6 +194,86 @@ function renderHeader() {
   const dateEl = document.getElementById('headerDate');
   if (dateEl) dateEl.textContent =
     `${dayName.charAt(0).toUpperCase() + dayName.slice(1)}, ${now.getDate()} de ${MONTHS_FULL[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+// ── Child profile overlay ─────────────────
+function calcAge(birthdate) {
+  if (!birthdate) return null;
+  const now   = new Date();
+  const birth = new Date(birthdate + 'T00:00:00');
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  return Math.max(0, age);
+}
+
+function renderChildProfileContent({ child, stats, events }) {
+  const age   = calcAge(child.birthdate);
+  const photo = child.photo_url
+    ? `<img class="profile-photo" src="${escHtml(child.photo_url)}" alt="${escHtml(child.name)}">`
+    : `<div class="profile-avatar-big">${child.emoji}</div>`;
+
+  const byMonth = groupByMonth(events);
+  const evHtml  = Object.keys(byMonth).length
+    ? Object.entries(byMonth).map(([k, evs]) => `
+        <div class="profile-month-group">
+          <div class="profile-month-title">${formatMonthKey(k)}</div>
+          ${evs.map(e => renderEventCard(e)).join('')}
+        </div>`).join('')
+    : '<div class="empty-state">Sin eventos registrados aún</div>';
+
+  return `
+    <div class="profile-topbar">
+      <button class="profile-back-btn" onclick="closeChildProfile()">← Volver</button>
+    </div>
+    <div class="profile-hero">
+      ${photo}
+      <h1 class="profile-name">${escHtml(child.name)}</h1>
+      ${age !== null ? `<div class="profile-age">${age} año${age !== 1 ? 's' : ''}</div>` : ''}
+    </div>
+    <div class="profile-stats-grid">
+      <div class="profile-stat"><div class="profile-stat-num">${stats.total}</div><div class="profile-stat-label">Total</div></div>
+      <div class="profile-stat"><div class="profile-stat-num">${stats.upcoming}</div><div class="profile-stat-label">Próximos</div></div>
+      <div class="profile-stat"><div class="profile-stat-num">${stats.medica}</div><div class="profile-stat-label">Médicas</div></div>
+      <div class="profile-stat"><div class="profile-stat-num">${stats.excursion}</div><div class="profile-stat-label">Excursiones</div></div>
+    </div>
+    <div class="profile-add-wrap">
+      <button class="btn btn-primary" onclick="openAddModalForChild(${child.id})">+ Añadir evento</button>
+    </div>
+    <div class="profile-events">${evHtml}</div>`;
+}
+
+async function openChildProfile(childId) {
+  state.currentProfileChildId = childId;
+  const overlay = document.getElementById('profileOverlay');
+  const content = document.getElementById('profileContent');
+  content.innerHTML = '<div class="loader">Cargando...</div>';
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  try {
+    const profile = await api.get(`/api/children/${childId}/profile`);
+    content.innerHTML = renderChildProfileContent(profile);
+  } catch (err) {
+    content.innerHTML = `<div style="padding:40px;text-align:center">
+      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+      <div style="font-weight:700;margin-bottom:16px">Error al cargar</div>
+      <div style="color:var(--text-muted);margin-bottom:20px">${escHtml(err.message)}</div>
+      <button class="btn btn-outline btn-sm" onclick="closeChildProfile()">Cerrar</button>
+    </div>`;
+  }
+}
+
+function closeChildProfile() {
+  document.getElementById('profileOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  state.currentProfileChildId = null;
+}
+
+function openAddModalForChild(childId) {
+  resetForm();
+  selectedChildId = childId;
+  renderChildSelector();
+  openModal();
 }
 
 // ── Logout ────────────────────────────────
@@ -383,9 +467,18 @@ async function loadSettings() {
     <div class="settings-row">
       <label>Hijo ${i + 1}</label>
       <div class="child-profile-editor">
-        <div class="child-emoji-btn" id="emojiBtn${c.id}" onclick="openEmojiPicker(${c.id})" title="Cambiar emoji">${c.emoji}</div>
+        <div class="child-avatar-wrap">
+          ${c.photo_url
+            ? `<img class="child-photo-thumb" src="${escHtml(c.photo_url)}" onclick="document.getElementById('photoInput${c.id}').click()" title="Cambiar foto">`
+            : `<div class="child-emoji-btn" id="emojiBtn${c.id}" onclick="openEmojiPicker(${c.id})" title="Cambiar emoji">${c.emoji}</div>`}
+          <label class="btn-photo-upload" title="Subir foto">
+            📷
+            <input type="file" id="photoInput${c.id}" accept="image/*" style="display:none" onchange="uploadChildPhoto(${c.id}, this)">
+          </label>
+        </div>
         <div class="child-profile-name">
           <input class="settings-input" type="text" id="childName${c.id}" value="${escHtml(c.name)}" maxlength="30" placeholder="Nombre">
+          <input class="settings-input" type="date" id="childBirthdate${c.id}" value="${escHtml(c.birthdate || '')}" title="Fecha de nacimiento">
         </div>
       </div>
       <div class="emoji-picker-grid" id="emojiPicker${c.id}" style="display:none">
@@ -545,17 +638,43 @@ function selectEmoji(childId, emoji) {
 async function saveChildren() {
   try {
     for (const c of state.children) {
-      const name  = document.getElementById(`childName${c.id}`)?.value?.trim();
-      const emoji = document.getElementById(`emojiBtn${c.id}`)?.textContent?.trim();
+      const name      = document.getElementById(`childName${c.id}`)?.value?.trim();
+      const emoji     = document.getElementById(`emojiBtn${c.id}`)?.textContent?.trim() || c.emoji;
+      const birthdate = document.getElementById(`childBirthdate${c.id}`)?.value || null;
       if (!name) { toast('El nombre no puede estar vacío', 'error'); return; }
-      await api.put(`/api/children/${c.id}`, { name, emoji });
+      await api.put(`/api/children/${c.id}`, { name, emoji, birthdate });
       c.name = name;
       c.emoji = emoji;
+      c.birthdate = birthdate;
     }
     renderHeader();
     toast('Perfiles guardados ✓', 'success');
   } catch (e) {
     toast('Error al guardar: ' + e.message, 'error');
+  }
+}
+
+async function uploadChildPhoto(childId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('photo', file);
+  try {
+    toast('Subiendo foto...', '');
+    const r = await fetch(`/api/children/${childId}/photo`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${mfToken}` },
+      body: formData,
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    const child = state.children.find(c => c.id === childId);
+    if (child) child.photo_url = data.photo_url;
+    toast('Foto actualizada ✓', 'success');
+    renderHeader();
+    loadSettings();
+  } catch (err) {
+    toast('Error: ' + err.message, 'error');
   }
 }
 
@@ -764,6 +883,9 @@ async function switchView(viewId) {
 
 async function refreshCurrentView() {
   try { await VIEW_LOADERS[state.currentView](); } catch {}
+  if (state.currentProfileChildId) {
+    try { await openChildProfile(state.currentProfileChildId); } catch {}
+  }
 }
 
 // ── Category filter ───────────────────────

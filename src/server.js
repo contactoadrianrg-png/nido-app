@@ -18,6 +18,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
+// If UPLOADS_DIR is set (Render disk), serve uploads from there at /uploads
+if (process.env.UPLOADS_DIR) {
+  app.use('/uploads', express.static(process.env.UPLOADS_DIR));
+}
+
 // ── Public: auth ───────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
