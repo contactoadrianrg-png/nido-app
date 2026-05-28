@@ -176,10 +176,14 @@ function escHtml(str) {
 function renderHeader() {
   const el = document.getElementById('headerAvatars');
   el.innerHTML = state.children.map(c => {
-    const avatar = c.photo_url
-      ? `<img class="avatar-photo" src="${escHtml(c.photo_url)}" alt="${escHtml(c.name)}">`
-      : c.emoji;
-    return `<div class="avatar-badge" onclick="openChildProfile(${c.id})">${avatar} ${escHtml(c.name)}</div>`;
+    const inner = c.photo_url
+      ? `<img class="child-circle-img" src="${escHtml(c.photo_url)}" alt="${escHtml(c.name)}">`
+      : `<div class="child-circle-emoji">${c.emoji}</div>`;
+    return `
+      <div class="child-circle-wrap" onclick="openChildProfile(${c.id})">
+        <div class="child-circle">${inner}</div>
+        <div class="child-name-pill">${escHtml(c.name)}</div>
+      </div>`;
   }).join('');
 
   const now  = new Date();
@@ -194,6 +198,66 @@ function renderHeader() {
   const dateEl = document.getElementById('headerDate');
   if (dateEl) dateEl.textContent =
     `${dayName.charAt(0).toUpperCase() + dayName.slice(1)}, ${now.getDate()} de ${MONTHS_FULL[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+// ── Side drawer (category filter) ────────
+function openDrawer() {
+  renderDrawerCats();
+  document.getElementById('sideDrawer').classList.add('open');
+  document.getElementById('drawerBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer() {
+  document.getElementById('sideDrawer').classList.remove('open');
+  document.getElementById('drawerBackdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function renderDrawerCats() {
+  const DRAWER_CATS = [
+    { id: '',          label: 'Todos',     emoji: '📋', bg: 'rgba(124,77,255,0.12)'  },
+    { id: 'medica',    label: 'Médica',    emoji: '🏥', bg: 'rgba(255,107,107,0.14)' },
+    { id: 'examen',    label: 'Examen',    emoji: '📝', bg: 'rgba(155,89,182,0.14)'  },
+    { id: 'excursion', label: 'Excursión', emoji: '🎒', bg: 'rgba(38,222,129,0.14)'  },
+    { id: 'deporte',   label: 'Deporte',   emoji: '⚽', bg: 'rgba(246,201,14,0.14)'  },
+    { id: 'colegio',   label: 'Colegio',   emoji: '🏫', bg: 'rgba(69,170,242,0.14)'  },
+    { id: 'otro',      label: 'Otro',      emoji: '📌', bg: 'rgba(253,150,68,0.14)'  },
+  ];
+  const active = state.upcomingCatFilter;
+  document.getElementById('drawerCatList').innerHTML = DRAWER_CATS.map(cat => `
+    <div class="drawer-cat-item${active === cat.id ? ' active' : ''}" onclick="selectDrawerCat('${cat.id}')">
+      <div class="drawer-cat-icon" style="background:${cat.bg}">${cat.emoji}</div>
+      <span class="drawer-cat-label">${cat.label}</span>
+      ${active === cat.id ? '<span class="drawer-cat-check">✓</span>' : ''}
+    </div>`).join('');
+}
+
+function selectDrawerCat(catId) {
+  state.upcomingCatFilter = catId;
+  closeDrawer();
+  // Sync the hidden chip buttons so existing JS logic still works
+  document.querySelectorAll('#upcomingCatFilter .chip-cat').forEach(b =>
+    b.classList.toggle('active', b.dataset.cat === catId));
+  // Show active filter pill
+  const bar = document.getElementById('activeFilterBar');
+  if (catId) {
+    const DRAWER_CATS = [
+      { id: 'medica','Médica':'Médica', label:'Médica', emoji:'🏥' },
+      { id: 'examen',    label:'Examen',    emoji:'📝' },
+      { id: 'excursion', label:'Excursión', emoji:'🎒' },
+      { id: 'deporte',   label:'Deporte',   emoji:'⚽' },
+      { id: 'colegio',   label:'Colegio',   emoji:'🏫' },
+      { id: 'otro',      label:'Otro',      emoji:'📌' },
+    ];
+    const cat = CATEGORIES.find(c => c.id === catId);
+    bar.style.display = 'flex';
+    bar.innerHTML = `${cat ? cat.emoji + ' ' + cat.label : catId} <span onclick="selectDrawerCat('')" style="margin-left:4px;opacity:.6">✕</span>`;
+  } else {
+    bar.style.display = 'none';
+  }
+  if (state.currentView === 'upcoming') loadUpcoming();
+  if (state.currentView === 'history') loadHistory();
 }
 
 // ── Child profile overlay ─────────────────
@@ -325,7 +389,13 @@ async function loadUpcoming() {
   }
 
   if (events.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🗓️</div><h3>¡Sin eventos próximos!</h3><p>Pulsa <strong>+</strong> para añadir uno</p></div>`;
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <div class="empty-title">Sin eventos próximos</div>
+        <div class="empty-sub">Añade el primer evento para empezar</div>
+        <button class="btn btn-primary btn-lg" onclick="openAddModal()">+ Añadir evento</button>
+      </div>`;
     return;
   }
 
@@ -909,6 +979,9 @@ document.getElementById('fabBtn').addEventListener('click', openAddModal);
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('eventModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
 document.getElementById('logoutBtn').addEventListener('click', logout);
+document.getElementById('hamburgerBtn').addEventListener('click', openDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
 document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 
 // ── Init ──────────────────────────────────
