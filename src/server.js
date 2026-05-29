@@ -71,6 +71,19 @@ app.get('/api/debug/env', (req, res) => {
   res.json(result);
 });
 
+// ── Debug: one-time fix — clear chat_id from a specific user ─────────────────
+app.get('/api/debug/fix-chatid/:userId', async (req, res) => {
+  try {
+    await db.pool.query(
+      `UPDATE user_telegram SET chat_id_1='', chat_id_2='' WHERE user_id=$1`,
+      [req.params.userId]
+    );
+    res.json({ ok: true, cleared_for_user_id: req.params.userId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Debug: raw DB tables (users, children, user_telegram) ───────────────────
 app.get('/api/debug/db', async (req, res) => {
   try {
