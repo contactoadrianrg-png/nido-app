@@ -649,6 +649,11 @@ async function loadSettings() {
                value="${escHtml(tg.chat_id_2 || '')}" placeholder="Chat ID opcional">
       </div>
       <div class="settings-row">
+        <label>Chat ID Grupo 🏘️ <span style="font-weight:400;font-size:12px">(opcional)</span></label>
+        <input class="settings-input" type="text" id="tgGroupChatId"
+               value="${escHtml(tg.group_chat_id || '')}" placeholder="ID del grupo de Telegram">
+      </div>
+      <div class="settings-row">
         <label>Hora del recordatorio</label>
         <select class="settings-input" id="tgHour" style="background:#fafafa">
           ${Array.from({length: 24}, (_, h) =>
@@ -781,11 +786,12 @@ async function uploadChildPhoto(childId, input) {
 async function saveTelegramSettings() {
   try {
     await api.put('/api/profile/telegram', {
-      bot_token:    document.getElementById('tgBotToken')?.value?.trim() || '',
-      chat_id_1:    document.getElementById('tgChatId1')?.value?.trim() || '',
-      chat_id_2:    document.getElementById('tgChatId2')?.value?.trim() || '',
-      reminder_hour: parseInt(document.getElementById('tgHour')?.value) || 8,
-      enabled:       document.getElementById('tgEnabled')?.checked ? 1 : 0,
+      bot_token:     document.getElementById('tgBotToken')?.value?.trim()     || '',
+      chat_id_1:     document.getElementById('tgChatId1')?.value?.trim()      || '',
+      chat_id_2:     document.getElementById('tgChatId2')?.value?.trim()      || '',
+      group_chat_id: document.getElementById('tgGroupChatId')?.value?.trim()  || '',
+      reminder_hour: parseInt(document.getElementById('tgHour')?.value)       || 8,
+      enabled:       document.getElementById('tgEnabled')?.checked            ? 1 : 0,
     });
     toast('Configuración Telegram guardada ✓', 'success');
   } catch (e) {

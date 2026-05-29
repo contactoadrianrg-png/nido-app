@@ -54,9 +54,10 @@ router.get('/telegram', async (req, res) => {
     const tg = await db.getUserTelegram(req.user.id);
     res.json({
       ...tg,
-      bot_token: tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
-      chat_id_1: tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '',
-      chat_id_2: tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '',
+      bot_token:     tg.bot_token     || process.env.TELEGRAM_BOT_TOKEN || '',
+      chat_id_1:     tg.chat_id_1     || process.env.TELEGRAM_CHAT_ID_1 || '',
+      chat_id_2:     tg.chat_id_2     || process.env.TELEGRAM_CHAT_ID_2 || '',
+      group_chat_id: tg.group_chat_id || '',
     });
   } catch (err) {
     console.error('[profile] GET /telegram error:', err.message);
@@ -82,8 +83,8 @@ router.put('/telegram', async (req, res) => {
       return res.status(401).json({ error: 'Sesión expirada. Por favor inicia sesión de nuevo.' });
     }
 
-    const { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled } = req.body;
-    await db.updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled });
+    const { bot_token, chat_id_1, chat_id_2, group_chat_id, reminder_hour, enabled } = req.body;
+    await db.updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, group_chat_id, reminder_hour, enabled });
     res.json({ success: true });
   } catch (err) {
     console.error('[profile] PUT /telegram error:', err.message);

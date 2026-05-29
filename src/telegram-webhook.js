@@ -364,15 +364,19 @@ async function handleTelegramWebhook(req, res) {
     const message = update?.message;
     if (!message) return;
 
-    const chatId   = String(message.chat.id);
-    const fromName = message.from?.first_name || 'alguien';
-    const msgType  = message.photo ? 'foto' : message.document ? 'documento' : 'texto';
+    const chatId    = String(message.chat.id);
+    const fromId    = String(message.from?.id || '');
+    const fromName  = message.from?.first_name || 'alguien';
+    const chatType  = message.chat.type || 'private';
+    const isGroup   = chatType === 'group' || chatType === 'supergroup';
+    const msgType   = message.photo ? 'foto' : message.document ? 'documento' : 'texto';
+    const lookupId  = isGroup ? fromId : chatId;   // groups: search by sender's personal ID
 
-    console.log(`[Telegram] Mensaje recibido de chat_id: ${chatId} (${fromName}, tipo: ${msgType})`);
+    console.log(`[Telegram] Mensaje recibido de chat_id: ${chatId} (${fromName}, tipo: ${msgType}, chat: ${chatType})`);
 
     // ── Find user by chat_id ──────────────────────────────────────────────
-    console.log(`[Telegram] Buscando usuario con chat_id: ${chatId}`);
-    const user = await db.getUserByChatId(chatId);
+    console.log(`[Telegram] Buscando usuario con ${isGroup ? 'from.id' : 'chat_id'}: ${lookupId}`);
+    const user = await db.getUserByChatId(lookupId);
 
     if (!user) {
       console.log(`[Telegram] Usuario NO encontrado para chat_id: ${chatId}`);

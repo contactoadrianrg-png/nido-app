@@ -43,9 +43,11 @@ async function initDb() {
       bot_token TEXT DEFAULT '',
       chat_id_1 TEXT DEFAULT '',
       chat_id_2 TEXT DEFAULT '',
+      group_chat_id TEXT DEFAULT '',
       reminder_hour INTEGER DEFAULT 8,
       enabled INTEGER DEFAULT 1
     );
+    ALTER TABLE user_telegram ADD COLUMN IF NOT EXISTS group_chat_id TEXT DEFAULT '';
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id SERIAL PRIMARY KEY,
@@ -185,37 +187,37 @@ async function usePasswordResetToken(token) {
 
 // ── Telegram config ───────────────────────────────────────────
 async function getUserTelegram(userId) {
+  const empty = { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', group_chat_id: '', reminder_hour: 8, enabled: 1 };
   try {
     const { rows } = await pool.query('SELECT * FROM user_telegram WHERE user_id = $1', [userId]);
-    if (rows.length > 0) return rows[0];
-    try {
-      await pool.query('INSERT INTO user_telegram (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]);
-    } catch (_) {}
-    return { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
+    if (rows.length > 0) return { group_chat_id: '', ...rows[0] };
+    try { await pool.query('INSERT INTO user_telegram (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]); } catch (_) {}
+    return empty;
   } catch (err) {
     console.error('[DB] getUserTelegram error:', err.message);
-    return { user_id: userId, bot_token: '', chat_id_1: '', chat_id_2: '', reminder_hour: 8, enabled: 1 };
+    return empty;
   }
 }
 
-async function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
+async function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, group_chat_id, reminder_hour, enabled }) {
   const clean = v => (v || '').toString().trim();
   await pool.query(`
-    INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, group_chat_id, reminder_hour, enabled)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (user_id) DO UPDATE SET
       bot_token     = EXCLUDED.bot_token,
       chat_id_1     = EXCLUDED.chat_id_1,
       chat_id_2     = EXCLUDED.chat_id_2,
+      group_chat_id = EXCLUDED.group_chat_id,
       reminder_hour = EXCLUDED.reminder_hour,
       enabled       = EXCLUDED.enabled
-  `, [userId, clean(bot_token), clean(chat_id_1), clean(chat_id_2), reminder_hour ?? 8, enabled ? 1 : 0]);
+  `, [userId, clean(bot_token), clean(chat_id_1), clean(chat_id_2), clean(group_chat_id), reminder_hour ?? 8, enabled ? 1 : 0]);
 }
 
 async function getUsersWithTelegramEnabled(hour) {
   const { rows } = await pool.query(`
     SELECT u.id AS user_id, u.name AS user_name,
-           t.bot_token, t.chat_id_1, t.chat_id_2
+           t.bot_token, t.chat_id_1, t.chat_id_2, t.group_chat_id
     FROM users u
     JOIN user_telegram t ON t.user_id = u.id
     WHERE t.enabled = 1 AND t.reminder_hour = $1
@@ -227,7 +229,7 @@ async function getUsersWithTelegramEnabled(hour) {
 async function getAllUsersWithTelegramEnabled() {
   const { rows } = await pool.query(`
     SELECT u.id AS user_id, u.name AS user_name,
-           t.bot_token, t.chat_id_1, t.chat_id_2
+           t.bot_token, t.chat_id_1, t.chat_id_2, t.group_chat_id
     FROM users u
     JOIN user_telegram t ON t.user_id = u.id
     WHERE t.enabled = 1

@@ -47,10 +47,38 @@ function buildReminderMessage(userName, todayEvents, tomorrowEvents) {
   return msg;
 }
 
+function buildGroupReminderMessage(todayEvents, tomorrowEvents) {
+  const dateStr = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  let msg = `📅 *${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}*\n\n`;
+
+  if (todayEvents.length > 0) {
+    msg += '*Hoy:*\n';
+    todayEvents.forEach(e => {
+      const em   = CATEGORY_EMOJIS[e.category] || '📌';
+      const time = e.time ? ` a las *${e.time}*` : '';
+      msg += `${em} ${e.child_emoji} *${e.child_name}* tiene ${e.title}${time}\n`;
+    });
+  } else {
+    msg += '_Sin eventos hoy_ ✨\n';
+  }
+
+  if (tomorrowEvents.length > 0) {
+    msg += '\n*Mañana:*\n';
+    tomorrowEvents.forEach(e => {
+      const em   = CATEGORY_EMOJIS[e.category] || '📌';
+      const time = e.time ? ` a las *${e.time}*` : '';
+      msg += `${em} ${e.child_emoji} *${e.child_name}* tiene ${e.title}${time}\n`;
+    });
+  }
+
+  return msg;
+}
+
 async function sendUserReminder(userId, tg) {
-  const botToken = (tg.bot_token || process.env.TELEGRAM_BOT_TOKEN || '').trim();
-  const chatId1  = (tg.chat_id_1 || process.env.TELEGRAM_CHAT_ID_1 || '').trim();
-  const chatId2  = (tg.chat_id_2 || process.env.TELEGRAM_CHAT_ID_2 || '').trim();
+  const botToken    = (tg.bot_token    || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  const chatId1     = (tg.chat_id_1    || process.env.TELEGRAM_CHAT_ID_1 || '').trim();
+  const chatId2     = (tg.chat_id_2    || process.env.TELEGRAM_CHAT_ID_2 || '').trim();
+  const groupChatId = (tg.group_chat_id || '').trim();
 
   if (!botToken || !chatId1) return { sent: false, reason: 'no_config' };
 
@@ -61,19 +89,31 @@ async function sendUserReminder(userId, tg) {
     return { sent: false, reason: 'no_events' };
   }
 
-  const user    = await db.findUserById(userId);
-  const message = buildReminderMessage(user?.name, todayEvents, tomorrowEvents);
+  const user          = await db.findUserById(userId);
+  const personalMsg   = buildReminderMessage(user?.name, todayEvents, tomorrowEvents);
+  const groupMsg      = buildGroupReminderMessage(todayEvents, tomorrowEvents);
 
-  const recipients = [chatId1, chatId2].filter(id => id);
-  const results    = [];
+  const personalChats = [chatId1, chatId2].filter(id => id);
+  const results       = [];
 
-  for (const chatId of recipients) {
+  for (const chatId of personalChats) {
     try {
-      const data = await sendTelegram(botToken, chatId, message);
-      results.push({ chatId, success: true, data });
+      await sendTelegram(botToken, chatId, personalMsg);
+      results.push({ chatId, success: true });
     } catch (err) {
       console.error(`[Scheduler] Error enviando a ${chatId}:`, err.message);
       results.push({ chatId, success: false, error: err.message });
+    }
+  }
+
+  if (groupChatId) {
+    try {
+      await sendTelegram(botToken, groupChatId, groupMsg);
+      results.push({ chatId: groupChatId, type: 'group', success: true });
+      console.log(`[Scheduler] Grupo enviado → ${groupChatId}`);
+    } catch (err) {
+      console.error(`[Scheduler] Error enviando al grupo ${groupChatId}:`, err.message);
+      results.push({ chatId: groupChatId, type: 'group', success: false, error: err.message });
     }
   }
 
