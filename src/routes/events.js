@@ -1,15 +1,13 @@
 'use strict';
-const express  = require('express');
-const multer   = require('multer');
-const db       = require('../database');
-const { uploadPhoto } = require('../cloudinary');
+const express = require('express');
+const multer  = require('multer');
+const db      = require('../database');
 
 const router = express.Router();
 
-// Memory storage: file is available as req.file.buffer for Cloudinary upload
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 5 * 1024 * 1024 },
+  limits:  { fileSize: 2 * 1024 * 1024 },   // 2 MB — enough for a profile photo
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) return cb(new Error('Solo imágenes'));
     cb(null, true);
@@ -40,8 +38,8 @@ router.get('/children/:id/profile', async (req, res) => {
 router.post('/children/:id/photo', upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
-    const publicId = `child_${req.params.id}_${Date.now()}`;
-    const photoUrl = await uploadPhoto(req.file.buffer, publicId);
+    const mime    = req.file.mimetype || 'image/jpeg';
+    const photoUrl = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
     await db.updateChildPhoto(req.user.id, req.params.id, photoUrl);
     res.json({ success: true, photo_url: photoUrl });
   } catch (err) {
