@@ -12,8 +12,18 @@ const eventsRoutes  = require('./routes/events');
 const profileRoutes = require('./routes/profile');
 const adminRoutes   = require('./routes/admin');
 const { handleTelegramWebhook, registerTelegramWebhook } = require('./telegram-webhook');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
+let _chatClient = null;
+function getChatClient() {
+  if (!_chatClient) {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error('ANTHROPIC_API_KEY no configurada');
+    _chatClient = new Anthropic({ apiKey: key });
+  }
+  return _chatClient;
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
@@ -161,6 +171,37 @@ app.get('/api/export.ics', authOrQuery, async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="mi-familia.ics"');
     res.send(generateICS(events, children));
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Chat IA ────────────────────────────────────────────────────────────────
+app.post('/api/chat', authMiddleware, async (req, res) => {
+  const { message } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: 'Mensaje requerido' });
+
+  try {
+    const [events, children] = await Promise.all([
+      db.getEvents(req.user.id, { upcoming: 'true' }),
+      db.getChildren(req.user.id),
+    ]);
+
+    const todayStr    = new Date().toISOString().slice(0, 10);
+    const childrenStr = children.map(c => `${c.emoji} ${c.name}`).join(', ') || 'ninguno';
+    const eventsStr   = events.slice(0, 50).map(e =>
+      `• ${e.child_name}: "${e.title}" | ${e.category} | ${e.date}${e.time ? ' ' + e.time : ''}${e.notes ? ' | ' + e.notes : ''}`
+    ).join('\n') || '(sin eventos próximos)';
+
+    const response = await getChatClient().messages.create({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 600,
+      system:     `Eres el asistente de la app familiar Nido. Tienes acceso a los datos del usuario. Responde en español de forma concisa, cálida y útil. Usa emojis con moderación. Hoy es ${todayStr}.\n\nHijos: ${childrenStr}\n\nEventos próximos:\n${eventsStr}`,
+      messages:   [{ role: 'user', content: message.trim() }],
+    });
+
+    res.json({ reply: response.content[0]?.text || 'Sin respuesta' });
+  } catch (err) {
+    console.error('[Chat] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

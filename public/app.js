@@ -1056,6 +1056,79 @@ window.addEventListener('popstate', async (e) => {
 });
 
 // ── Init ──────────────────────────────────
+// ── CHAT IA ───────────────────────────────
+let _chatMessages = [];
+let _chatTypingId = null;
+
+function openChat() {
+  document.getElementById('chatPanel').classList.add('open');
+  document.getElementById('chatBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  if (_chatMessages.length === 0) {
+    _chatAddMsg('ai', '¡Hola! Soy tu asistente de Nido 🐦\nPregúntame sobre los eventos de tus hijos.\n\nEjemplos:\n• "¿Qué tiene Liam esta semana?"\n• "¿Cuándo es la próxima cita médica?"\n• "Resúmeme el mes de junio"');
+  }
+  setTimeout(() => document.getElementById('chatInput')?.focus(), 340);
+}
+
+function closeChat() {
+  document.getElementById('chatPanel').classList.remove('open');
+  document.getElementById('chatBackdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function _chatAddMsg(role, text, typing = false) {
+  const id = Date.now() + Math.random();
+  _chatMessages.push({ id, role, text, typing });
+  _chatRender();
+  return id;
+}
+
+function _chatRemoveById(id) {
+  _chatMessages = _chatMessages.filter(m => m.id !== id);
+}
+
+function _chatRender() {
+  const el = document.getElementById('chatMessages');
+  if (!el) return;
+  el.innerHTML = _chatMessages.map(m => `
+    <div class="chat-bubble ${m.role === 'user' ? 'user' : 'ai'}${m.typing ? ' typing' : ''}">
+      ${escHtml(m.text)}
+    </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function _chatSend() {
+  const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('chatSend');
+  const text = input.value.trim();
+  if (!text || sendBtn.disabled) return;
+  input.value = '';
+  sendBtn.disabled = true;
+
+  _chatAddMsg('user', text);
+  const typingId = _chatAddMsg('ai', '···', true);
+
+  try {
+    const data = await api.post('/api/chat', { message: text });
+    _chatRemoveById(typingId);
+    _chatAddMsg('ai', data.reply || 'Sin respuesta');
+  } catch (err) {
+    _chatRemoveById(typingId);
+    _chatAddMsg('ai', '⚠️ No pude conectar con el asistente. Inténtalo de nuevo.');
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+document.getElementById('chatFabBtn').addEventListener('click', openChat);
+document.getElementById('chatClose').addEventListener('click', closeChat);
+document.getElementById('chatBackdrop').addEventListener('click', closeChat);
+document.getElementById('chatSend').addEventListener('click', _chatSend);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _chatSend(); }
+});
+
 async function init() {
   try {
     state.children = await api.get('/api/children');

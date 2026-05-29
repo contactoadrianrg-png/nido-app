@@ -188,6 +188,37 @@
   <!-- ── TOAST ── -->
   <div class="toast" id="toast"></div>
 
+  <!-- ── CHAT FAB ── -->
+  <button class="chat-fab" id="chatFabBtn" title="Chat con Nido IA">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
+
+  <!-- ── CHAT PANEL ── -->
+  <div class="chat-backdrop" id="chatBackdrop"></div>
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-header-bar">
+      <div class="chat-header-info">
+        <div class="chat-avatar-icon">🐦</div>
+        <div>
+          <div class="chat-title">Asistente Nido</div>
+          <div class="chat-subtitle">Impulsado por Claude IA</div>
+        </div>
+      </div>
+      <button class="chat-close-btn" id="chatClose">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-bar">
+      <input type="text" class="chat-input" id="chatInput" placeholder="Pregunta algo sobre tus hijos..." autocomplete="off">
+      <button class="chat-send-btn" id="chatSend">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
