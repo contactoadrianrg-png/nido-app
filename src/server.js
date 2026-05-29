@@ -71,6 +71,20 @@ app.get('/api/debug/env', (req, res) => {
   res.json(result);
 });
 
+// ── Debug: raw DB tables (users, children, user_telegram) ───────────────────
+app.get('/api/debug/db', async (req, res) => {
+  try {
+    const [users, children, telegram] = await Promise.all([
+      db.pool.query('SELECT id, name FROM users ORDER BY id'),
+      db.pool.query('SELECT id, name, emoji, user_id FROM children ORDER BY user_id, id'),
+      db.pool.query('SELECT user_id, chat_id_1, chat_id_2, bot_token IS NOT NULL AND bot_token != \'\' AS has_token FROM user_telegram ORDER BY user_id'),
+    ]);
+    res.json({ users: users.rows, children: children.rows, user_telegram: telegram.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Debug: simulate webhook user lookup ──────────────────────────────────────
 app.get('/api/debug/telegram/:chatId', async (req, res) => {
   try {
