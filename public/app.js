@@ -367,6 +367,30 @@ function buildChildFilterChips(containerId, stateKey, onChangeCb) {
   });
 }
 
+// ── Next event pinned bar ─────────────────
+function updateNextEventBar(events) {
+  const bar = document.getElementById('nextEventBar');
+  if (!bar) return;
+  const next = events
+    .filter(e => e.date >= today())
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.time || '99:99').localeCompare(b.time || '99:99');
+    })[0];
+  if (!next) { bar.style.display = 'none'; return; }
+  const cat     = CATEGORIES.find(c => c.id === next.category) || { emoji: '📌' };
+  const dateStr = formatDate(next.date);
+  const timeStr = next.time ? ` · ${next.time}` : '';
+  bar.style.display = '';
+  bar.innerHTML = `
+    <div class="neb-icon">${cat.emoji}</div>
+    <div>
+      <div class="neb-label">Próximo evento</div>
+      <div class="neb-title">${escHtml(next.title)}</div>
+      <div class="neb-meta">${next.child_emoji} ${escHtml(next.child_name)} · ${dateStr}${timeStr}</div>
+    </div>`;
+}
+
 // ── VIEW: Upcoming ────────────────────────
 async function loadUpcoming() {
   buildChildFilterChips('upcomingChildFilter', 'upcomingChildFilter', loadUpcoming);
@@ -411,6 +435,8 @@ async function loadUpcoming() {
       ${groups[date].map(e => renderEventCard(e, true)).join('')}
     </div>`;
   }).join('');
+
+  updateNextEventBar(events);
 }
 
 // ── VIEW: History ─────────────────────────
@@ -824,11 +850,16 @@ function resetForm() {
 
 function renderChildSelector() {
   const el = document.getElementById('childSelector');
-  el.innerHTML = state.children.map(c => `
-    <div class="child-btn${selectedChildId == c.id ? ' selected' : ''}" onclick="selectChild(${c.id})">
-      <span class="child-emoji-big">${c.emoji}</span>
-      <span class="child-name-label">${escHtml(c.name)}</span>
-    </div>`).join('');
+  el.innerHTML = state.children.map(c => {
+    const avatar = c.photo_url
+      ? `<img class="child-btn-photo" src="${escHtml(c.photo_url)}" alt="${escHtml(c.name)}">`
+      : `<span class="child-emoji-big">${c.emoji}</span>`;
+    return `
+      <div class="child-btn${selectedChildId == c.id ? ' selected' : ''}" onclick="selectChild(${c.id})">
+        ${avatar}
+        <span class="child-name-label">${escHtml(c.name)}</span>
+      </div>`;
+  }).join('');
 }
 
 function selectChild(id) { selectedChildId = id; renderChildSelector(); }
@@ -937,6 +968,9 @@ async function switchView(viewId, pushHistory = true) {
   document.getElementById('fabBtn').style.display =
     (viewId === 'upcoming' || viewId === 'history') ? '' : 'none';
 
+  const nextBar = document.getElementById('nextEventBar');
+  if (nextBar && viewId !== 'upcoming') nextBar.style.display = 'none';
+
   if (pushHistory) {
     history.pushState({ nido: true, view: viewId }, '', '/app');
   }
@@ -1032,6 +1066,11 @@ async function init() {
   selectedChildId = state.children[0]?.id || null;
   renderHeader();
   initCategoryFilter();
+
+  window.addEventListener('scroll', () => {
+    document.querySelector('.header')?.classList.toggle('scrolled', window.scrollY > 50);
+  }, { passive: true });
+
   // Seed the history stack with the initial view so popstate has a state to land on
   history.replaceState({ nido: true, view: 'upcoming' }, '', '/app');
   await switchView('upcoming', false);
