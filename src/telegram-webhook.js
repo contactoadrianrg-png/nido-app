@@ -366,13 +366,15 @@ async function handleTelegramWebhook(req, res) {
     const chatId   = String(message.chat.id);
     const fromName = message.from?.first_name || 'alguien';
     const msgType  = message.photo ? 'foto' : message.document ? 'documento' : 'texto';
-    console.log(`[Telegram webhook] ${msgType} de chat_id=${chatId} (${fromName})`);
+
+    console.log(`[Telegram] Mensaje recibido de chat_id: ${chatId} (${fromName}, tipo: ${msgType})`);
 
     // ── Find user by chat_id ──────────────────────────────────────────────
+    console.log(`[Telegram] Buscando usuario con chat_id: ${chatId}`);
     const user = await db.getUserByChatId(chatId);
 
     if (!user) {
-      console.log(`[Telegram webhook] chat_id=${chatId} no vinculado`);
+      console.log(`[Telegram] Usuario NO encontrado para chat_id: ${chatId}`);
       const token = ADMIN_BOT_TOKEN();
       if (token) {
         await sendMessage(token, chatId,
@@ -381,11 +383,11 @@ async function handleTelegramWebhook(req, res) {
       return;
     }
 
-    console.log(`[Telegram webhook] usuario: id=${user.id} name="${user.name}"`);
+    console.log(`[Telegram] Usuario encontrado: ${user.name} (user_id=${user.id})`);
 
     const botToken = user.bot_token || ADMIN_BOT_TOKEN();
     if (!botToken) {
-      console.warn(`[Telegram webhook] sin bot_token para user ${user.id}`);
+      console.warn(`[Telegram] Sin bot_token para user_id=${user.id} — abortando`);
       return;
     }
 
@@ -414,7 +416,7 @@ async function handleTelegramWebhook(req, res) {
     // ── Text message ──────────────────────────────────────────────────────
     if (!message.text) return;
     const text = message.text.trim();
-    console.log(`[Telegram webhook] texto: "${text}"`);
+    console.log(`[Telegram] Texto recibido: "${text}"`);
 
     if (text === '/start' || text === '/help' || text === '/ayuda') {
       await sendMessage(botToken, chatId, HELP_TEXT);
@@ -434,7 +436,7 @@ async function handleTelegramWebhook(req, res) {
 
     // ── NLP event parsing ─────────────────────────────────────────────────
     const children = await db.getChildren(user.id);
-    console.log(`[Telegram webhook] hijos: ${children.map(c => c.name).join(', ') || '(ninguno)'}`);
+    console.log(`[Telegram] Hijos del usuario: ${children.map(c => c.name).join(', ') || '(ninguno)'}`);
 
     if (!children.length) {
       await sendMessage(botToken, chatId, '⚠️ No tienes hijos registrados. Añade uno primero en la app Nido.');
@@ -447,11 +449,18 @@ async function handleTelegramWebhook(req, res) {
     const category = detectCategory(text);
     const title    = buildTitle(text, child);
 
-    console.log(`[Telegram webhook] evento → child="${child.name}" date="${date}" time="${time}" cat="${category}" title="${title}"`);
+    console.log(`[Telegram] Creando evento: "${title}" | hijo="${child.name}" | fecha=${date} | hora=${time || 'ninguna'} | cat=${category}`);
 
-    await db.createEvent(user.id, {
-      child_id: child.id, title, category, date, time: time || null, notes: null,
-    });
+    try {
+      await db.createEvent(user.id, {
+        child_id: child.id, title, category, date, time: time || null, notes: null,
+      });
+      console.log(`[Telegram] Evento creado: "${title}" para ${child.name} el ${date}`);
+    } catch (err) {
+      console.error(`[Telegram] Error creando evento: ${err.message}`);
+      await sendMessage(botToken, chatId, '❌ Error al guardar el evento. Inténtalo de nuevo.');
+      return;
+    }
 
     const dateStr = new Date(date + 'T12:00:00').toLocaleDateString('es-ES', {
       weekday: 'long', day: 'numeric', month: 'long',
@@ -461,7 +470,7 @@ async function handleTelegramWebhook(req, res) {
       `✅ <b>Evento añadido</b>\n\n📅 <b>${title}</b>\n👤 ${child.emoji} ${child.name}\n🗓 ${dateStr}${timeStr}\n🏷 ${category}`);
 
   } catch (err) {
-    console.error('[Telegram webhook] Error inesperado:', err.message, err.stack);
+    console.error('[Telegram] Error inesperado en webhook:', err.message, err.stack);
   }
 }
 
