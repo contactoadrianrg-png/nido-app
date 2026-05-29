@@ -435,6 +435,7 @@ async function getUserByChatId(chatId) {
 }
 
 module.exports = {
+  pool,
   initDb,
   createUser, findUserByEmail, findUserById, updateUserPassword, updateUserName, getAllUsers,
   createPasswordResetToken, findPasswordResetToken, usePasswordResetToken,

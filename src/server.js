@@ -35,6 +35,28 @@ app.use(async (req, res, next) => {
   }
 });
 
+// ── Health check ──────────────────────────────────────────────────────────
+app.get('/api/health', async (req, res) => {
+  const dbUrl = process.env.DATABASE_URL || '';
+  let dbStatus = 'unknown';
+  let dbError  = null;
+  try {
+    await db.pool.query('SELECT 1');
+    dbStatus = 'ok';
+  } catch (err) {
+    dbStatus = 'error';
+    dbError  = err.message;
+  }
+  res.json({
+    status:     dbStatus === 'ok' ? 'ok' : 'degraded',
+    db:         dbStatus,
+    db_error:   dbError,
+    db_url:     dbUrl ? dbUrl.slice(0, 30) + '…' : '(not set)',
+    node:       process.version,
+    env:        process.env.NODE_ENV || 'development',
+  });
+});
+
 // ── Public: auth ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
