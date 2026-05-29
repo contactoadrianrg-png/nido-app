@@ -63,6 +63,14 @@ app.use('/api/auth', authRoutes);
 // ── Public: Telegram webhook ───────────────────────────────────────────────
 app.post('/api/telegram/webhook', handleTelegramWebhook);
 
+// ── Debug: env vars check (shows only which vars are set, not their values) ─
+app.get('/api/debug/env', (req, res) => {
+  const vars = ['DATABASE_URL','JWT_SECRET','TELEGRAM_BOT_TOKEN','APP_URL','ANTHROPIC_API_KEY','CRON_SECRET'];
+  const result = {};
+  for (const v of vars) result[v] = process.env[v] ? '✓ set' : '✗ MISSING';
+  res.json(result);
+});
+
 // ── Vercel Cron: daily reminder (replaces node-cron in serverless) ─────────
 // Vercel calls GET /api/cron/reminder at the schedule defined in vercel.json.
 // Protected by CRON_SECRET so only Vercel (or an admin) can trigger it.
