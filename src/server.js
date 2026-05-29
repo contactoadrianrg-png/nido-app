@@ -22,20 +22,7 @@ if (process.env.UPLOADS_DIR) {
   app.use('/uploads', express.static(process.env.UPLOADS_DIR));
 }
 
-// ── Lazy DB init — runs once on first request, cached for the lifetime of the instance ──
-let dbReady = null;
-app.use(async (req, res, next) => {
-  try {
-    if (!dbReady) dbReady = db.initDb();
-    await dbReady;
-    next();
-  } catch (err) {
-    console.error('[Server] DB init failed:', err.message);
-    res.status(503).json({ error: 'Database unavailable' });
-  }
-});
-
-// ── Health check ──────────────────────────────────────────────────────────
+// ── Health check — BEFORE DB middleware so it always responds ─────────────
 app.get('/api/health', async (req, res) => {
   const dbUrl = process.env.DATABASE_URL || '';
   let dbStatus = 'unknown';
@@ -48,13 +35,26 @@ app.get('/api/health', async (req, res) => {
     dbError  = err.message;
   }
   res.json({
-    status:     dbStatus === 'ok' ? 'ok' : 'degraded',
-    db:         dbStatus,
-    db_error:   dbError,
-    db_url:     dbUrl ? dbUrl.slice(0, 30) + '…' : '(not set)',
-    node:       process.version,
-    env:        process.env.NODE_ENV || 'development',
+    status:   dbStatus === 'ok' ? 'ok' : 'degraded',
+    db:       dbStatus,
+    db_error: dbError,
+    db_url:   dbUrl ? dbUrl.slice(0, 30) + '…' : '(not set)',
+    node:     process.version,
+    env:      process.env.NODE_ENV || 'development',
   });
+});
+
+// ── Lazy DB init — runs once on first request, cached for the lifetime of the instance ──
+let dbReady = null;
+app.use(async (req, res, next) => {
+  try {
+    if (!dbReady) dbReady = db.initDb();
+    await dbReady;
+    next();
+  } catch (err) {
+    console.error('[Server] DB init failed:', err.message);
+    res.status(503).json({ error: 'Database unavailable' });
+  }
 });
 
 // ── Public: auth ───────────────────────────────────────────────────────────
