@@ -294,9 +294,10 @@ async function handleMediaMessage(message, user, botToken, chatId, children) {
       const date     = isValidDate(ev.fecha) ? ev.fecha : toISODate(new Date());
       const time     = ev.hora && /^\d{2}:\d{2}$/.test(ev.hora) ? ev.hora : null;
       const title    = (ev.titulo || 'Evento').trim();
-      const category = ev.categoria && CAT_MAP[ev.categoria] === undefined && ['medica','examen','excursion','deporte','colegio','otro'].includes(ev.categoria)
+      const VALID_CATS = ['medica','examen','excursion','deporte','colegio','otro'];
+      const category = (ev.categoria && VALID_CATS.includes(ev.categoria))
         ? ev.categoria
-        : detectCategory(title + ' ' + (ev.notas || ''));
+        : (detectCategory(title + ' ' + (ev.notas || '')) || 'otro');
       const notes    = ev.notas || null;
 
       await db.createEvent(user.id, { child_id: child.id, title, category, date, time, notes });
@@ -446,7 +447,7 @@ async function handleTelegramWebhook(req, res) {
     const child    = parseChildName(text, children) || children[0];
     const date     = parseDate(text);
     const time     = parseTime(text);
-    const category = detectCategory(text);
+    const category = detectCategory(text) || 'otro';
     const title    = buildTitle(text, child);
 
     console.log(`[Telegram] Creando evento: "${title}" | hijo="${child.name}" | fecha=${date} | hora=${time || 'ninguna'} | cat=${category}`);

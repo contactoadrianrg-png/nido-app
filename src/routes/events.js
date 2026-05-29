@@ -72,9 +72,10 @@ router.get('/events', async (req, res) => {
 
 // POST /api/events
 router.post('/events', async (req, res) => {
-  const { child_id, title, category, date, time, notes } = req.body;
-  if (!child_id || !title || !category || !date) {
-    return res.status(400).json({ error: 'child_id, title, category y date son requeridos' });
+  const { child_id, title, date, time, notes } = req.body;
+  const category = req.body.category || 'otro';
+  if (!child_id || !title || !date) {
+    return res.status(400).json({ error: 'child_id, title y date son requeridos' });
   }
   try {
     const id = await db.createEvent(req.user.id, { child_id, title: title.trim(), category, date, time, notes });
@@ -86,9 +87,10 @@ router.post('/events', async (req, res) => {
 
 // PUT /api/events/:id
 router.put('/events/:id', async (req, res) => {
-  const { child_id, title, category, date, time, notes } = req.body;
-  if (!child_id || !title || !category || !date) {
-    return res.status(400).json({ error: 'child_id, title, category y date son requeridos' });
+  const { child_id, title, date, time, notes } = req.body;
+  const category = req.body.category || 'otro';
+  if (!child_id || !title || !date) {
+    return res.status(400).json({ error: 'child_id, title y date son requeridos' });
   }
   try {
     await db.updateEvent(req.user.id, req.params.id, { child_id, title: title.trim(), category, date, time, notes });

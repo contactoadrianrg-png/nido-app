@@ -885,12 +885,11 @@ document.getElementById('eventForm').addEventListener('submit', async (e) => {
   const time  = document.getElementById('eventTime').value;
   const notes = document.getElementById('eventNotes').value.trim();
 
-  if (!selectedChildId)  { toast('Selecciona un hijo', 'error');       return; }
-  if (!selectedCategory) { toast('Selecciona una categoría', 'error'); return; }
-  if (!title)            { toast('Escribe un título', 'error');         return; }
-  if (!date)             { toast('Selecciona una fecha', 'error');      return; }
+  if (!selectedChildId)  { toast('Selecciona un hijo', 'error');  return; }
+  if (!title)            { toast('Escribe un título', 'error');   return; }
+  if (!date)             { toast('Selecciona una fecha', 'error'); return; }
 
-  const body = { child_id: selectedChildId, title, category: selectedCategory, date, time: time || null, notes: notes || null };
+  const body = { child_id: selectedChildId, title, category: selectedCategory || 'otro', date, time: time || null, notes: notes || null };
 
   try {
     if (id) {
