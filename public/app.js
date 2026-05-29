@@ -923,7 +923,7 @@ document.getElementById('deleteEventBtn').addEventListener('click', async () => 
 // ── Navigation ────────────────────────────
 const VIEW_LOADERS = { upcoming: loadUpcoming, history: loadHistory, stats: loadStats, settings: loadSettings };
 
-async function switchView(viewId) {
+async function switchView(viewId, pushHistory = true) {
   state.currentView = viewId;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view' + viewId.charAt(0).toUpperCase() + viewId.slice(1)).classList.add('active');
@@ -937,6 +937,11 @@ async function switchView(viewId) {
 
   document.getElementById('fabBtn').style.display =
     (viewId === 'upcoming' || viewId === 'history') ? '' : 'none';
+
+  if (pushHistory) {
+    history.pushState({ nido: true, view: viewId }, '', '/app');
+  }
+
   try {
     await VIEW_LOADERS[viewId]();
   } catch (err) {
@@ -988,6 +993,35 @@ document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer)
 document.getElementById('drawerClose').addEventListener('click', closeDrawer);
 document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
 
+// ── Back button: stay inside the app ─────
+window.addEventListener('popstate', async (e) => {
+  // 1. Close any open overlay before navigating back in views
+  if (document.getElementById('sideDrawer').classList.contains('open')) {
+    closeDrawer();
+    history.pushState({ nido: true, view: state.currentView }, '', '/app');
+    return;
+  }
+  if (document.getElementById('profileOverlay').classList.contains('open')) {
+    closeChildProfile();
+    history.pushState({ nido: true, view: state.currentView }, '', '/app');
+    return;
+  }
+  if (document.getElementById('eventModal').classList.contains('open')) {
+    closeModal();
+    history.pushState({ nido: true, view: state.currentView }, '', '/app');
+    return;
+  }
+
+  // 2. If the popped state belongs to the app, switch to that view
+  if (e.state && e.state.nido && e.state.view) {
+    await switchView(e.state.view, false);
+    return;
+  }
+
+  // 3. No app state left — user tried to go before the app. Bounce back.
+  history.pushState({ nido: true, view: state.currentView }, '', '/app');
+});
+
 // ── Init ──────────────────────────────────
 async function init() {
   try {
@@ -999,7 +1033,9 @@ async function init() {
   selectedChildId = state.children[0]?.id || null;
   renderHeader();
   initCategoryFilter();
-  await switchView('upcoming');
+  // Seed the history stack with the initial view so popstate has a state to land on
+  history.replaceState({ nido: true, view: 'upcoming' }, '', '/app');
+  await switchView('upcoming', false);
 }
 
 init();
