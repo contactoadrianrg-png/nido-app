@@ -199,6 +199,7 @@ async function getUserTelegram(userId) {
 }
 
 async function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, reminder_hour, enabled }) {
+  const clean = v => (v || '').toString().trim();
   await pool.query(`
     INSERT INTO user_telegram (user_id, bot_token, chat_id_1, chat_id_2, reminder_hour, enabled)
     VALUES ($1, $2, $3, $4, $5, $6)
@@ -208,7 +209,7 @@ async function updateUserTelegram(userId, { bot_token, chat_id_1, chat_id_2, rem
       chat_id_2     = EXCLUDED.chat_id_2,
       reminder_hour = EXCLUDED.reminder_hour,
       enabled       = EXCLUDED.enabled
-  `, [userId, bot_token || '', chat_id_1 || '', chat_id_2 || '', reminder_hour ?? 8, enabled ? 1 : 0]);
+  `, [userId, clean(bot_token), clean(chat_id_1), clean(chat_id_2), reminder_hour ?? 8, enabled ? 1 : 0]);
 }
 
 async function getUsersWithTelegramEnabled(hour) {
@@ -424,11 +425,26 @@ async function getUserByChatId(chatId) {
     SELECT u.id, u.name, t.bot_token, t.chat_id_1, t.chat_id_2
     FROM user_telegram t
     JOIN users u ON u.id = t.user_id
-    WHERE (t.chat_id_1 = $1 OR t.chat_id_2 = $1)
+    WHERE (TRIM(t.chat_id_1) = $1 OR TRIM(t.chat_id_2) = $1)
       AND $1 != ''
     LIMIT 1
   `, [id]);
-  console.log(`[DB] getUserByChatId: ${rows.length ? `encontrado user_id=${rows[0].id}` : 'no encontrado'}`);
+  if (rows.length) {
+    console.log(`[DB] getUserByChatId: encontrado user_id=${rows[0].id} ("${rows[0].name}") — chat_id_1="${rows[0].chat_id_1}" chat_id_2="${rows[0].chat_id_2}"`);
+  } else {
+    // Debug: show all non-empty chat_ids to help diagnose mismatches
+    const { rows: all } = await pool.query(`
+      SELECT u.id, u.name, t.chat_id_1, t.chat_id_2
+      FROM user_telegram t JOIN users u ON u.id = t.user_id
+      WHERE t.chat_id_1 != '' OR t.chat_id_2 != ''
+    `);
+    if (all.length) {
+      const stored = all.map(r => `user_id=${r.id}("${r.name}") chat_id_1="${r.chat_id_1}" chat_id_2="${r.chat_id_2}"`).join(' | ');
+      console.log(`[DB] getUserByChatId: no encontrado. chat_ids en DB → ${stored}`);
+    } else {
+      console.log(`[DB] getUserByChatId: no encontrado. No hay ningún chat_id guardado en la DB.`);
+    }
+  }
   return rows[0] || null;
 }
 
