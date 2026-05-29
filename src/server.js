@@ -71,6 +71,28 @@ app.get('/api/debug/env', (req, res) => {
   res.json(result);
 });
 
+// ── Debug: simulate webhook user lookup ──────────────────────────────────────
+app.get('/api/debug/telegram/:chatId', async (req, res) => {
+  try {
+    const chatId = req.params.chatId;
+    const user = await db.getUserByChatId(chatId);
+    if (!user) return res.json({ found: false, chatId });
+    const children = await db.getChildren(user.id);
+    res.json({
+      found:      true,
+      chatId,
+      user_id:    user.id,
+      user_name:  user.name,
+      bot_token:  user.bot_token ? '✓ set' : '✗ missing (uses TELEGRAM_BOT_TOKEN)',
+      chat_id_1:  user.chat_id_1,
+      chat_id_2:  user.chat_id_2,
+      children:   children.map(c => ({ id: c.id, name: c.name, emoji: c.emoji })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Vercel Cron: daily reminder (replaces node-cron in serverless) ─────────
 // Vercel calls GET /api/cron/reminder at the schedule defined in vercel.json.
 // Protected by CRON_SECRET so only Vercel (or an admin) can trigger it.
