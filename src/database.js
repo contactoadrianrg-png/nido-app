@@ -5,9 +5,15 @@ const bcrypt   = require('bcryptjs');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 10000,
+  query_timeout: 15000,
 });
 
+// An idle connection can fail when the database restarts. Do not crash the server.
+pool.on('error', () => console.error('[DB] Se ha cerrado una conexión inactiva'));
+
 async function initDb() {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL no configurada');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -66,11 +72,11 @@ async function initDb() {
     );
   `);
 
-  // Bootstrap: create admin if no users exist
+  // Only bootstrap an admin with explicitly configured credentials.
   const { rows: [{ c }] } = await pool.query('SELECT COUNT(*)::int AS c FROM users');
-  if (c === 0) {
-    const adminEmail    = process.env.ADMIN_EMAIL    || 'admin@familia.local';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin1234';
+  if (c === 0 && process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    const adminEmail    = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
     const hash = await bcrypt.hash(adminPassword, 10);
 
     const { rows: [{ id: adminId }] } = await pool.query(
@@ -92,7 +98,7 @@ async function initDb() {
       [adminId, process.env.TELEGRAM_BOT_TOKEN || '', process.env.TELEGRAM_CHAT_ID_1 || '', process.env.TELEGRAM_CHAT_ID_2 || '']
     );
 
-    console.log(`[DB] Admin creado → email: ${adminEmail}  contraseña: ${adminPassword}`);
+    console.log('[DB] Administrador inicial creado');
   }
 
   // Seed admin Telegram from env vars if DB values are empty

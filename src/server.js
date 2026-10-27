@@ -3,6 +3,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const express   = require('express');
 const path      = require('path');
 const db        = require('./database');
+const { createDatabaseMiddleware } = require('./middleware/database');
 const { generateICS } = require('./ics');
 const { sendUserReminder } = require('./scheduler');
 
@@ -32,110 +33,43 @@ if (process.env.UPLOADS_DIR) {
   app.use('/uploads', express.static(process.env.UPLOADS_DIR));
 }
 
-// ── Health check — BEFORE DB middleware so it always responds ─────────────
+// Public pages remain available while PostgreSQL is unavailable.
+const pub = p => path.join(__dirname, '../public', p);
+app.get('/login',          (_, res) => res.sendFile(pub('login.html')));
+app.get('/register',       (_, res) => res.sendFile(pub('register.html')));
+app.get('/app',            (_, res) => res.sendFile(pub('app.html')));
+app.get('/admin',          (_, res) => res.sendFile(pub('admin.html')));
+app.get('/reset-password', (_, res) => res.sendFile(pub('reset-password.html')));
+
+// Do not return credentials, connection strings or raw database errors publicly.
 app.get('/api/health', async (req, res) => {
-  const dbUrl = process.env.DATABASE_URL || '';
-  let dbStatus = 'unknown';
-  let dbError  = null;
-  try {
-    await db.pool.query('SELECT 1');
-    dbStatus = 'ok';
-  } catch (err) {
-    dbStatus = 'error';
-    dbError  = err.message;
+  let healthy = false;
+  if (process.env.DATABASE_URL) {
+    try {
+      await db.pool.query('SELECT 1');
+      healthy = true;
+    } catch {}
   }
-  res.json({
-    status:   dbStatus === 'ok' ? 'ok' : 'degraded',
-    db:       dbStatus,
-    db_error: dbError,
-    db_url:   dbUrl ? dbUrl.slice(0, 30) + '…' : '(not set)',
-    node:     process.version,
-    env:      process.env.NODE_ENV || 'development',
+  res.set('Cache-Control', 'no-store');
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    db: healthy ? 'ok' : 'error',
   });
 });
 
-// ── Lazy DB init — runs once on first request, cached for the lifetime of the instance ──
-let dbReady = null;
-app.use(async (req, res, next) => {
-  try {
-    if (!dbReady) dbReady = db.initDb();
-    await dbReady;
-    next();
-  } catch (err) {
-    console.error('[Server] DB init failed:', err.message);
-    res.status(503).json({ error: 'Database unavailable' });
-  }
-});
+// Temporary debugging routes must never expose or change family data.
+app.use('/api/debug', (_, res) => res.sendStatus(404));
 
-// ── Public: auth ───────────────────────────────────────────────────────────
+app.use('/api', createDatabaseMiddleware(() => db.initDb()));
 app.use('/api/auth', authRoutes);
-
-// ── Public: Telegram webhook ───────────────────────────────────────────────
 app.post('/api/telegram/webhook', handleTelegramWebhook);
-
-// ── Debug: env vars check (shows only which vars are set, not their values) ─
-app.get('/api/debug/env', (req, res) => {
-  const vars = ['DATABASE_URL','JWT_SECRET','TELEGRAM_BOT_TOKEN','APP_URL','ANTHROPIC_API_KEY','CRON_SECRET'];
-  const result = {};
-  for (const v of vars) result[v] = process.env[v] ? '✓ set' : '✗ MISSING';
-  res.json(result);
-});
-
-// ── Debug: one-time fix — clear chat_id from a specific user ─────────────────
-app.get('/api/debug/fix-chatid/:userId', async (req, res) => {
-  try {
-    await db.pool.query(
-      `UPDATE user_telegram SET chat_id_1='', chat_id_2='' WHERE user_id=$1`,
-      [req.params.userId]
-    );
-    res.json({ ok: true, cleared_for_user_id: req.params.userId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Debug: raw DB tables (users, children, user_telegram) ───────────────────
-app.get('/api/debug/db', async (req, res) => {
-  try {
-    const [users, children, telegram] = await Promise.all([
-      db.pool.query('SELECT id, name FROM users ORDER BY id'),
-      db.pool.query('SELECT id, name, emoji, user_id FROM children ORDER BY user_id, id'),
-      db.pool.query('SELECT user_id, chat_id_1, chat_id_2, bot_token IS NOT NULL AND bot_token != \'\' AS has_token FROM user_telegram ORDER BY user_id'),
-    ]);
-    res.json({ users: users.rows, children: children.rows, user_telegram: telegram.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Debug: simulate webhook user lookup ──────────────────────────────────────
-app.get('/api/debug/telegram/:chatId', async (req, res) => {
-  try {
-    const chatId = req.params.chatId;
-    const user = await db.getUserByChatId(chatId);
-    if (!user) return res.json({ found: false, chatId });
-    const children = await db.getChildren(user.id);
-    res.json({
-      found:      true,
-      chatId,
-      user_id:    user.id,
-      user_name:  user.name,
-      bot_token:  user.bot_token ? '✓ set' : '✗ missing (uses TELEGRAM_BOT_TOKEN)',
-      chat_id_1:  user.chat_id_1,
-      chat_id_2:  user.chat_id_2,
-      children:   children.map(c => ({ id: c.id, name: c.name, emoji: c.emoji })),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ── Vercel Cron: daily reminder (replaces node-cron in serverless) ─────────
 // Vercel calls GET /api/cron/reminder at the schedule defined in vercel.json.
 // Protected by CRON_SECRET so only Vercel (or an admin) can trigger it.
 app.get('/api/cron/reminder', async (req, res) => {
   const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -214,14 +148,6 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 
 // ── Protected + admin ─────────────────────────────────────────────────────
 app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
-
-// ── Frontend pages ────────────────────────────────────────────────────────
-const pub = p => path.join(__dirname, '../public', p);
-app.get('/login',          (_, res) => res.sendFile(pub('login.html')));
-app.get('/register',       (_, res) => res.sendFile(pub('register.html')));
-app.get('/app',            (_, res) => res.sendFile(pub('app.html')));
-app.get('/admin',          (_, res) => res.sendFile(pub('admin.html')));
-app.get('/reset-password', (_, res) => res.sendFile(pub('reset-password.html')));
 
 // ── Local dev: start server directly ──────────────────────────────────────
 // When run with `node src/server.js` or `nodemon`, boots a regular HTTP server.
