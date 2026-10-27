@@ -1,4 +1,4 @@
-# 🏠 Mi Familia
+# 🏠 Nido
 
 App web multi-usuario para registrar y gestionar actividades de los hijos. Diseño tipo app móvil, recordatorios automáticos por Telegram y exportación a calendario (.ics).
 
@@ -16,14 +16,14 @@ App web multi-usuario para registrar y gestionar actividades de los hijos. Dise�
 ## Tecnología
 
 - **Backend:** Node.js + Express
-- **Base de datos:** SQLite (better-sqlite3)
+- **Base de datos:** PostgreSQL (pg)
 - **Auth:** JWT + bcryptjs
 - **Notificaciones:** Telegram Bot API
 - **Frontend:** Vanilla JS + CSS (sin frameworks)
 
 ---
 
-## Despliegue en Railway
+## Despliegue en un servidor Node.js
 
 ### 1. Preparar el repositorio
 
@@ -47,7 +47,8 @@ En Railway → tu servicio → **Variables**, añade:
 
 | Variable | Valor | Descripción |
 |---|---|---|
-| `PORT` | (Railway lo pone automáticamente) | Puerto del servidor |
+| `PORT` | Lo proporciona el alojamiento | Puerto del servidor |
+| `DATABASE_URL` | Configurar en el alojamiento | Conexión PostgreSQL externa |
 | `JWT_SECRET` | Una cadena aleatoria larga | Secreto para firmar tokens |
 | `ADMIN_EMAIL` | tu@email.com | Email del primer administrador |
 | `ADMIN_PASSWORD` | contraseña segura | Contraseña del administrador |
@@ -65,17 +66,19 @@ En Railway → tu servicio → **Variables**, añade:
 
 ### 4. Persistencia de la base de datos
 
-SQLite guarda los datos en `familia.db`. Railway tiene **volúmenes persistentes**:
+Los datos se guardan en PostgreSQL, mediante `DATABASE_URL`. El repositorio no contiene las cuentas, citas ni copias de la base de datos. Para recuperar datos anteriores hace falta conservar la base original o una copia de seguridad.
 
-1. En tu servicio → **Volumes** → **Add Volume**
-2. Mount path: `/app` (o donde Railway clone el repo)
-3. Esto garantiza que la base de datos sobrevive a reinicios y redeploys
+### Despliegue existente en Vercel
 
-> Sin volumen, los datos se pierden en cada redeploy.
+`vercel.json` dirige las peticiones a `src/server.js`. Configura `DATABASE_URL`, `JWT_SECRET`, `APP_URL` y `CRON_SECRET` en el proyecto Nido. Usa una conexión PostgreSQL externa accesible desde Vercel; para un proveedor con agrupación de conexiones, utiliza su conexión apropiada para funciones sin servidor. Guarda los valores confidenciales en el alojamiento, fuera del repositorio.
+
+El cron de Vercel se ejecuta a las 08:00 UTC. No se envían recordatorios por esa ruta sin `CRON_SECRET`.
+
+`GET /api/health` comprueba únicamente la conexión con PostgreSQL y devuelve 200 o 503, sin mostrar la URL, credenciales ni errores internos. Las páginas públicas se sirven aunque falle la base. Las operaciones API inicializan el esquema y pueden volver a intentarlo tras un fallo. Las rutas de diagnóstico temporales `/api/debug/*` están retiradas.
 
 ### 5. Primer acceso
 
-Tras el despliegue, accede a tu URL y el sistema crea automáticamente la cuenta admin con las credenciales de `ADMIN_EMAIL` y `ADMIN_PASSWORD`. Entra en `/login` con esas credenciales.
+Tras el despliegue, accede a tu URL y el sistema crea una cuenta admin solamente si la base está vacía y has configurado tanto `ADMIN_EMAIL` como `ADMIN_PASSWORD`. Sin ambas variables puedes crear una cuenta normal en `/register`; no se crean credenciales de administrador por defecto. Entra en `/login` con esas credenciales.
 
 ---
 
@@ -83,7 +86,7 @@ Tras el despliegue, accede a tu URL y el sistema crea automáticamente la cuenta
 
 ```bash
 # Instalar dependencias
-npm install
+npm ci
 
 # Crear archivo de entorno
 cp .env.example .env
@@ -104,9 +107,11 @@ La app queda disponible en `http://localhost:3000`.
 PORT=3000
 TIMEZONE=Europe/Madrid
 
+DATABASE_URL=
 JWT_SECRET=cambia_esto_por_algo_seguro
-ADMIN_EMAIL=admin@familia.local
-ADMIN_PASSWORD=admin1234
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+CRON_SECRET=
 APP_URL=http://localhost:3000
 
 # Telegram (se configura también por usuario desde el perfil)
@@ -129,3 +134,7 @@ SMTP_FROM=noreply@familia.app
 4. Pulsa **Mensaje de prueba** para verificar
 
 Los recordatorios se envían automáticamente a la hora configurada si hay eventos ese día o el siguiente.
+
+## Comprobar los cambios
+
+Ejecuta `npm test`. Las pruebas cubren la recuperación después de una conexión fallida, peticiones simultáneas, páginas disponibles durante la caída, retirada de diagnósticos públicos y arranque sin administrador por defecto. Utilizan una base simulada; la comprobación con PostgreSQL real sigue siendo necesaria después de configurar el alojamiento.
